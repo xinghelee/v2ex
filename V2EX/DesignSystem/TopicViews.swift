@@ -200,10 +200,16 @@ struct TopicListCard<Item: Identifiable, RowContent: View>: View {
 /// `fontSize`/`lineSpacing` override the reader defaults — replies use a
 /// slightly smaller body, so one renderer serves both.
 struct ContentBlocksView: View {
+    private struct PreviewImage: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+
     let blocks: [ContentBlock]
     var fontSize: CGFloat? = nil
     var lineSpacing: CGFloat? = nil
     @EnvironmentObject private var settings: AppSettings
+    @State private var previewImage: PreviewImage?
 
     private var baseSize: CGFloat { fontSize ?? settings.bodyFontSize }
     private var baseSpacing: CGFloat { lineSpacing ?? settings.bodyLineSpacing }
@@ -264,39 +270,190 @@ struct ContentBlocksView: View {
                     }
 
                 case .image(let url):
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            // Frame first, then fit — without the explicit
-                            // width the image lays out at intrinsic size and
-                            // gets clipped (same bug as the avatars).
-                            image.resizable().scaledToFit()
-                                .frame(maxWidth: .infinity)
-                        case .failure:
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Theme.inset)
-                                .frame(height: 120)
-                                .overlay {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 22))
-                                        .foregroundStyle(Theme.faint)
-                                }
-                        case .empty:
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Theme.inset)
-                                .frame(height: 160)
-                                .overlay(ProgressView().tint(Theme.accent))
-                        @unknown default:
-                            EmptyView()
+                    Button {
+                        previewImage = PreviewImage(url: url)
+                    } label: {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                // Frame first, then fit — without the explicit
+                                // width the image lays out at intrinsic size and
+                                // gets clipped (same bug as the avatars).
+                                image.resizable().scaledToFit()
+                                    .frame(maxWidth: .infinity)
+                            case .failure:
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Theme.inset)
+                                    .frame(height: 120)
+                                    .overlay {
+                                        Image(systemName: "photo")
+                                            .font(.system(size: 22))
+                                            .foregroundStyle(Theme.faint)
+                                    }
+                            case .empty:
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Theme.inset)
+                                    .frame(height: 160)
+                                    .overlay(ProgressView().tint(Theme.accent))
+                            @unknown default:
+                                EmptyView()
+                            }
                         }
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("放大查看图片")
 
                 case .rule:
                     Rectangle().fill(Theme.separator).frame(height: Theme.Metric.hairline)
                 }
             }
         }
+        .fullScreenCover(item: $previewImage) { preview in
+            FullScreenImagePreview(url: preview.url)
+        }
+    }
+}
+
+private struct FullScreenImagePreview: View {
+    let url: URL
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    ZoomablePreviewImage(image: image)
+                case .failure:
+                    VStack(spacing: 12) {
+                        Image(systemName: "photo.badge.exclamationmark")
+                            .font(.system(size: 32, weight: .light))
+                        Text("图片加载失败")
+                            .font(.system(size: 15, weight: .medium))
+                    }
+                    .foregroundStyle(.white.opacity(0.72))
+                case .empty:
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.white)
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .ignoresSafeArea()
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.48), in: Circle())
+                    }
+                    .accessibilityLabel("关闭图片预览")
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+        }
+        .statusBarHidden()
+        .presentationBackground(.black)
+    }
+}
+
+private struct ZoomablePreviewImage: View {
+    let image: Image
+
+    @State private var scale: CGFloat = 1
+    @State private var settledScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var settledOffset: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { proxy in
+            image
+                .resizable()
+                .scaledToFit()
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .scaleEffect(scale)
+                .offset(offset)
+                .contentShape(Rectangle())
+                .gesture(magnificationGesture(in: proxy.size))
+                .simultaneousGesture(dragGesture(in: proxy.size))
+                .onTapGesture(count: 2) {
+                    toggleZoom()
+                }
+                .accessibilityLabel("图片预览")
+                .accessibilityHint("双击放大或还原")
+        }
+    }
+
+    private func magnificationGesture(in size: CGSize) -> some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                scale = min(max(settledScale * value.magnification, 1), 5)
+                offset = clamped(offset, for: scale, in: size)
+            }
+            .onEnded { _ in
+                if scale < 1.05 {
+                    resetZoom()
+                } else {
+                    settledScale = scale
+                    offset = clamped(offset, for: scale, in: size)
+                    settledOffset = offset
+                }
+            }
+    }
+
+    private func dragGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                guard scale > 1 else { return }
+                let proposed = CGSize(
+                    width: settledOffset.width + value.translation.width,
+                    height: settledOffset.height + value.translation.height
+                )
+                offset = clamped(proposed, for: scale, in: size)
+            }
+            .onEnded { _ in
+                settledOffset = offset
+            }
+    }
+
+    private func toggleZoom() {
+        withAnimation(.snappy(duration: 0.24)) {
+            if scale > 1 {
+                resetZoom()
+            } else {
+                scale = 2.5
+                settledScale = 2.5
+            }
+        }
+    }
+
+    private func resetZoom() {
+        scale = 1
+        settledScale = 1
+        offset = .zero
+        settledOffset = .zero
+    }
+
+    private func clamped(_ offset: CGSize, for scale: CGFloat, in size: CGSize) -> CGSize {
+        let maxX = size.width * (scale - 1) / 2
+        let maxY = size.height * (scale - 1) / 2
+        return CGSize(
+            width: min(max(offset.width, -maxX), maxX),
+            height: min(max(offset.height, -maxY), maxY)
+        )
     }
 }
