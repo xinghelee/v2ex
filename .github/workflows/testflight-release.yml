@@ -1,0 +1,95 @@
+name: Publish Release After TestFlight
+
+on:
+  schedule:
+    - cron: "4,19,34,49 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: testflight-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install gate dependencies
+        run: python -m pip install "PyJWT[crypto]==2.10.1" "PyYAML==6.0.2"
+
+      - name: Read release metadata
+        id: metadata
+        run: python .github/scripts/testflight_release_gate.py --metadata-only
+
+      - name: Inspect existing release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          if release_json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,isDraft,isPrerelease 2>/dev/null)"; then
+            release_id="$(jq -r '.databaseId' <<<"$release_json")"
+            if [[ "$(jq -r '.isDraft' <<<"$release_json")" == "true" ]]; then
+              state="draft"
+            elif [[ "$(jq -r '.isPrerelease' <<<"$release_json")" == "true" ]]; then
+              state="prerelease"
+            else
+              state="published"
+            fi
+          else
+            release_id=""
+            state="missing"
+          fi
+          echo "id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          echo "Release $TAG: $state"
+
+      - name: Check TestFlight availability
+        if: steps.release.outputs.state != 'published'
+        id: gate
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: python .github/scripts/testflight_release_gate.py
+
+      - name: Publish GitHub Release
+        if: steps.release.outputs.state != 'published' && steps.gate.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+          RELEASE_STATE: ${{ steps.release.outputs.state }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          if [[ "$RELEASE_STATE" == "missing" ]]; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "V2EX for iOS $TAG" \
+              --generate-notes \
+              --latest
+          else
+            gh api \
+              --method PATCH \
+              "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              -F draft=false \
+              -F prerelease=false
+          fi
+
+          echo "Published $TAG after TestFlight $VERSION became publicly available." >> "$GITHUB_STEP_SUMMARY"

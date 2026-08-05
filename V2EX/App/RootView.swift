@@ -47,6 +47,7 @@ struct RootView: View {
     @State private var selection: AppTab = .home
     @State private var paths: [AppTab: NavigationPath] = [:]
     @State private var showCompose = false
+    @StateObject private var updateChecker = UpdateChecker()
 
     /// Debug launch helper — lets automation open a topic directly:
     /// `simctl launch booted com.vibe.v2ex -openTopic 1231572`
@@ -94,7 +95,15 @@ struct RootView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .fullScreenCover(isPresented: $showCompose) { ComposeView() }
+        .sheet(item: $updateChecker.availableRelease, onDismiss: {
+            updateChecker.snoozePresentedRelease()
+        }) { release in
+            TestFlightUpdateSheet(release: release)
+        }
         .environmentObject(notifications)
+        .task {
+            await updateChecker.checkForUpdate()
+        }
         .task(id: token.token) {
             await notifications.refresh(token: token.token)
         }

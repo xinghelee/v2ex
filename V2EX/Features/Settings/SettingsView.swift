@@ -72,7 +72,7 @@ struct SettingsView: View {
                         RowSeparator(leadingInset: 58)
 
                         SettingsRow(icon: "info.circle", iconColor: Theme.accent, title: "版本") {
-                            Text("1.0")
+                            Text(AppInfo.displayVersion)
                                 .font(.system(size: 15))
                                 .foregroundStyle(Theme.muted)
                         }
