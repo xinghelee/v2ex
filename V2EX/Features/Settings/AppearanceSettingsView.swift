@@ -6,6 +6,7 @@ struct AppearanceSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                PageIntro(text: "深浅模式、主题色与正文排版，改动即时生效。")
                 themeSection
                 paletteSection
                 bodySection
@@ -17,6 +18,8 @@ struct AppearanceSettingsView: View {
         .background(Theme.canvas)
         .navigationTitle("外观")
         .navigationBarTitleDisplayMode(.large)
+        // 设置是一条向下钻的支线，底部标签栏留着只会诱人半路跳走。
+        .toolbar(.hidden, for: .tabBar)
     }
 
     // MARK: 主题
@@ -68,6 +71,8 @@ struct AppearanceSettingsView: View {
                 }
             }
             .padding(.horizontal, Theme.Metric.screenPadding)
+            // 给选中环外扩的那几点留出空间，否则顶边会被裁掉。
+            .padding(.vertical, 6)
         }
     }
 
@@ -76,22 +81,26 @@ struct AppearanceSettingsView: View {
         return Button {
             withAnimation(.snappy) { settings.palette = palette }
         } label: {
-            VStack(spacing: 7) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+            VStack(spacing: 10) {
+                Circle()
                     .fill(
                         LinearGradient(
                             colors: [palette.accent, palette.accentDeep],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
                     )
-                    .frame(height: 58)
+                    .frame(width: 46, height: 46)
+                    // 极淡的内圈，免得深色模式下暗色块直接融进卡片底。
+                    .overlay { Circle().strokeBorder(.white.opacity(0.16), lineWidth: 1) }
                     .overlay {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(
-                                isSelected ? Theme.accent : Theme.separator,
-                                lineWidth: isSelected ? 2 : 1
-                            )
+                        // 选中环外扩一圈、和色块之间留空隙。描在边缘上会被
+                        // 渐变本身吃掉，看起来只像边更深了一点。
+                        Circle()
+                            .strokeBorder(Theme.accent, lineWidth: 2)
+                            .padding(-5)
+                            .opacity(isSelected ? 1 : 0)
                     }
+                    .frame(maxWidth: .infinity)
                 Text(palette.title)
                     .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? Theme.accent : Theme.muted)

@@ -23,6 +23,7 @@ struct ReadingSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                PageIntro(text: "控制阅读进度如何记忆，以及哪些内容自动下载留在本机。")
                 readingSection
                 offlineSection
             }
@@ -33,6 +34,8 @@ struct ReadingSettingsView: View {
         .background(Theme.canvas)
         .navigationTitle("阅读与离线")
         .navigationBarTitleDisplayMode(.large)
+        // 设置是一条向下钻的支线，底部标签栏留着只会诱人半路跳走。
+        .toolbar(.hidden, for: .tabBar)
         .task { await reloadCacheUsage() }
         .confirmationDialog("清空缓存？", isPresented: $showClearConfirm, titleVisibility: .visible) {
             Button("清空 \(formattedCacheSize)", role: .destructive) {

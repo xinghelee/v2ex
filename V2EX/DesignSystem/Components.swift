@@ -107,9 +107,11 @@ struct GroupHeader: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
+            // 12pt muted 太轻，一屏几组下来页面读不出骨架。分组标题是这些
+            // 页面唯一的结构，得有实墨重量才撑得住。
             Text(title)
-                .font(Type.label(12))
-                .foregroundStyle(Theme.muted)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.body)
             Spacer()
             if let trailing {
                 Button(trailing) { trailingAction?() }
@@ -119,6 +121,26 @@ struct GroupHeader: View {
         }
         .padding(.horizontal, Theme.Metric.headerPadding)
         .padding(.bottom, 8)
+    }
+}
+
+/// One line under a large navigation title saying what the screen is for.
+///
+/// A settings screen is otherwise a stack of switches with no voice, and the
+/// empty canvas under a short list reads as unfinished rather than calm. This
+/// gives the top of the page something to say and lets the content start lower.
+struct PageIntro: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 14))
+            .lineSpacing(3)
+            .foregroundStyle(Theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Theme.Metric.headerPadding)
+            .padding(.bottom, 4)
     }
 }
 
@@ -368,14 +390,13 @@ struct SettingsRow<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(iconColor)
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 30, height: 30)
+        HStack(spacing: 14) {
+            // 单色线条字形，不是填充色圆角方块 —— 那种一行一个彩色小方块的
+            // 排布是 iOS 设置的招牌长相，会把本应安静的列表变成拼色墙。
+            Image(systemName: icon)
+                .font(.system(size: 17))
+                .foregroundStyle(iconColor)
+                .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -391,7 +412,7 @@ struct SettingsRow<Trailing: View>: View {
             Spacer(minLength: 8)
             trailing
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Theme.Metric.cardPadding)
         .frame(minHeight: Theme.Metric.rowHeight)
         .contentShape(Rectangle())
     }

@@ -9,63 +9,83 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                CardSection {
-                    NavigationLink(value: Route.appearance) {
-                        SettingsRow(icon: "paintbrush.fill", iconColor: Theme.accent, title: "外观") {
-                            Chevron()
+                PageIntro(text: "账号连接、外观与阅读偏好都在这里。数据全部存在本机。")
+
+                // 账号排在最前：它是这页唯一有"状态"的东西，也是出问题时
+                // 用户来设置里要找的答案。偏好类的项每天都在用，但不需要
+                // 被查看。
+                VStack(alignment: .leading, spacing: 0) {
+                    GroupHeader(title: "账号")
+                    CardSection {
+                        NavigationLink(value: Route.tokenSetup) {
+                            SettingsRow(
+                                icon: "key",
+                                iconColor: Theme.accent,
+                                title: "Access Token",
+                                subtitle: token.hasToken ? "已连接" : "未设置"
+                            ) { Chevron() }
                         }
-                    }
-                    .buttonStyle(.plain)
-                    RowSeparator(leadingInset: 58)
+                        .buttonStyle(.plain)
+                        RowSeparator(leadingInset: 54)
 
-                    NavigationLink(value: Route.reading) {
-                        SettingsRow(
-                            icon: "book.fill",
-                            iconColor: Theme.accent,
-                            title: "阅读与离线",
-                            subtitle: "阅读进度、自动离线与缓存"
-                        ) { Chevron() }
-                    }
-                    .buttonStyle(.plain)
-                    RowSeparator(leadingInset: 58)
-
-                    NavigationLink(value: Route.tokenSetup) {
-                        SettingsRow(
-                            icon: "key.fill",
-                            iconColor: Theme.accent,
-                            title: "Access Token",
-                            subtitle: token.hasToken ? "已连接" : "未设置"
-                        ) { Chevron() }
-                    }
-                    .buttonStyle(.plain)
-                    RowSeparator(leadingInset: 58)
-
-                    NavigationLink(value: Route.v2exLogin) {
-                        SettingsRow(
-                            icon: "person.badge.key.fill",
-                            iconColor: Theme.accent,
-                            title: "V2EX 登录",
-                            subtitle: session.isLoggedIn ? "\(session.username) · 已登录" : "未登录（用于 app 内回复）"
-                        ) { Chevron() }
-                    }
-                    .buttonStyle(.plain)
-                    RowSeparator(leadingInset: 58)
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("自动同步关注节点")
-                                .font(.system(size: 17))
-                                .kerning(-0.43)
-                                .foregroundStyle(Theme.ink)
-                            Text(session.isLoggedIn ? "登录 \(session.username) 后自动同步网页收藏的节点" : "登录 V2EX 后自动同步网页收藏的节点")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.muted)
+                        NavigationLink(value: Route.v2exLogin) {
+                            SettingsRow(
+                                icon: "person.badge.key",
+                                iconColor: Theme.accent,
+                                title: "V2EX 登录",
+                                subtitle: session.isLoggedIn
+                                    ? "\(session.username) · 已登录"
+                                    : "未登录（用于 app 内回复）"
+                            ) { Chevron() }
                         }
-                        Spacer()
-                        Toggle("", isOn: $settings.autoSyncFollowedNodes)
-                            .labelsHidden()
+                        .buttonStyle(.plain)
+                        RowSeparator(leadingInset: 54)
+
+                        // 这个开关依赖登录态，跟着账号走才讲得通；它原本落在
+                        // 偏好项下面，读起来像是和外观、阅读并列的东西。
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("自动同步关注节点")
+                                    .font(.system(size: 17))
+                                    .kerning(-0.43)
+                                    .foregroundStyle(Theme.ink)
+                                Text(session.isLoggedIn
+                                    ? "登录 \(session.username) 后自动同步网页收藏的节点"
+                                    : "登录 V2EX 后自动同步网页收藏的节点")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Theme.muted)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $settings.autoSyncFollowedNodes)
+                                .labelsHidden()
+                                .disabled(!session.isLoggedIn)
+                        }
+                        .padding(.horizontal, Theme.Metric.cardPadding)
+                        .frame(minHeight: Theme.Metric.rowHeight)
                     }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: Theme.Metric.rowHeight)
+                }
+
+                VStack(alignment: .leading, spacing: 0) {
+                    GroupHeader(title: "偏好")
+                    CardSection {
+                        NavigationLink(value: Route.appearance) {
+                            SettingsRow(icon: "paintbrush", iconColor: Theme.accent, title: "外观") {
+                                Chevron()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        RowSeparator(leadingInset: 54)
+
+                        NavigationLink(value: Route.reading) {
+                            SettingsRow(
+                                icon: "book",
+                                iconColor: Theme.accent,
+                                title: "阅读与离线",
+                                subtitle: "阅读进度、自动离线与缓存"
+                            ) { Chevron() }
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 0) {
@@ -79,7 +99,7 @@ struct SettingsView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        RowSeparator(leadingInset: 58)
+                        RowSeparator(leadingInset: 54)
 
                         SettingsRow(icon: "info.circle", iconColor: Theme.accent, title: "版本") {
                             Text(AppInfo.displayVersion)
@@ -102,6 +122,8 @@ struct SettingsView: View {
         .background(Theme.canvas)
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.large)
+        // 设置是一条向下钻的支线，底部标签栏留着只会诱人半路跳走。
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -178,7 +200,7 @@ struct TokenSetupView: View {
                     openURL(URL(string: "https://www.v2ex.com/settings/tokens")!)
                 } label: {
                     CardSection {
-                        SettingsRow(icon: "safari.fill", iconColor: Theme.accent, title: "打开 Token 设置页") {
+                        SettingsRow(icon: "safari", iconColor: Theme.accent, title: "打开 Token 设置页") {
                             Chevron()
                         }
                     }
@@ -197,6 +219,7 @@ struct TokenSetupView: View {
         .background(Theme.canvas)
         .navigationTitle("Access Token")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .onAppear { draft = token.token }
     }
 

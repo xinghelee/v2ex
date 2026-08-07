@@ -53,6 +53,8 @@ struct V2EXLoginView: View {
         .background(Theme.canvas)
         .navigationTitle("V2EX 登录")
         .navigationBarTitleDisplayMode(.large)
+        // 设置是一条向下钻的支线，底部标签栏留着只会诱人半路跳走。
+        .toolbar(.hidden, for: .tabBar)
         // 两步验证直接弹出，不留在页面里。
         .sheet(isPresented: $needsTwoFactor) {
             TwoFactorSheet(onDone: { dismiss() })
