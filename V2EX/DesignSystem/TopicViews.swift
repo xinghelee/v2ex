@@ -297,6 +297,79 @@ struct TopicListCard<Item: Identifiable, RowContent: View>: View {
 /// Draws parsed HTML blocks with the reader settings from 外观 applied.
 /// `fontSize`/`lineSpacing` override the reader defaults — replies use a
 /// slightly smaller body, so one renderer serves both.
+/// An image inside a post body, sized the way the web renders it: scaled *down*
+/// to fit the column, but never scaled up past its own pixel size.
+///
+/// V2EX turns a bare image URL into `<img class="embedded_image">` whether it is
+/// a screenshot or a 64px reaction sticker — the markup is identical, so size is
+/// the only signal there is. Stretching everything to the full column turned
+/// those stickers into blurry full-width portraits.
+private struct ContentImage: View {
+    let url: URL
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    init(url: URL) {
+        self.url = url
+        _image = State(initialValue: RemoteImageMemoryCache.image(for: url))
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    // The cap is the picture's own width in points; the column
+                    // still shrinks anything wider, so this only stops upscaling.
+                    .frame(maxWidth: image.size.width)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else if failed {
+                placeholder(height: 120) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Theme.faint)
+                }
+            } else {
+                placeholder(height: 160) { ProgressView().tint(Theme.accent) }
+            }
+        }
+        .task(id: url) { await load() }
+    }
+
+    private func placeholder(height: CGFloat, @ViewBuilder content: () -> some View) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Theme.inset)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .overlay(content())
+    }
+
+    @MainActor
+    private func load() async {
+        if let cached = RemoteImageMemoryCache.image(for: url) {
+            image = cached
+            return
+        }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard !Task.isCancelled,
+                  let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode),
+                  let decoded = UIImage(data: data)
+            else {
+                failed = true
+                return
+            }
+            RemoteImageMemoryCache.insert(decoded, for: url)
+            image = decoded
+        } catch {
+            failed = !Task.isCancelled
+        }
+    }
+}
+
 struct ContentBlocksView: View {
     private struct PreviewImage: Identifiable {
         let id = UUID()
@@ -371,34 +444,8 @@ struct ContentBlocksView: View {
                     Button {
                         previewImage = PreviewImage(url: url)
                     } label: {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                // Frame first, then fit — without the explicit
-                                // width the image lays out at intrinsic size and
-                                // gets clipped (same bug as the avatars).
-                                image.resizable().scaledToFit()
-                                    .frame(maxWidth: .infinity)
-                            case .failure:
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Theme.inset)
-                                    .frame(height: 120)
-                                    .overlay {
-                                        Image(systemName: "photo")
-                                            .font(.system(size: 22))
-                                            .foregroundStyle(Theme.faint)
-                                    }
-                            case .empty:
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Theme.inset)
-                                    .frame(height: 160)
-                                    .overlay(ProgressView().tint(Theme.accent))
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        ContentImage(url: url)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("放大查看图片")

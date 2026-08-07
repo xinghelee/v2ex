@@ -101,6 +101,94 @@ struct TopicDetailView: View {
         .onDisappear { replyDrafts.save() }
     }
 
+    // MARK: @提及 补全
+
+    /// The `@name` fragment being typed at the tail of the draft, if any.
+    ///
+    /// Only the tail is examined. SwiftUI's `TextField` exposes no caret
+    /// position, and mentioning someone mid-sentence after the fact is rare
+    /// enough that it isn't worth dropping down to a `UITextView` for.
+    private var activeMentionQuery: String? {
+        let text = replyDrafts.text(for: topicID)
+        guard let at = text.lastIndex(of: "@") else { return nil }
+
+        // Anything before the "@" must be a word break, or an email address
+        // typed into the box would open the list.
+        if at > text.startIndex, !text[text.index(before: at)].isWhitespace { return nil }
+
+        let fragment = text[text.index(after: at)...]
+        guard !fragment.contains(where: \.isWhitespace) else { return nil }
+        return String(fragment)
+    }
+
+    /// Everyone in this thread, nearest floor first — the person you are
+    /// answering is almost always one of the last few to have spoken.
+    private var mentionCandidates: [String] {
+        guard let query = activeMentionQuery else { return [] }
+
+        var seen: Set<String> = []
+        var ordered: [String] = []
+        for item in model.replies.reversed() where !item.reply.authorName.isEmpty {
+            if seen.insert(item.reply.authorName).inserted {
+                ordered.append(item.reply.authorName)
+            }
+        }
+        if let author = model.topic?.authorName, !author.isEmpty, seen.insert(author).inserted {
+            ordered.append(author)
+        }
+        if !session.username.isEmpty { ordered.removeAll { $0 == session.username } }
+
+        let needle = query.lowercased()
+        let matches = needle.isEmpty ? ordered : ordered.filter { $0.lowercased().hasPrefix(needle) }
+        return Array(matches.prefix(8))
+    }
+
+    private func mentionAvatar(for username: String) -> URL? {
+        if let member = model.replies.first(where: { $0.reply.authorName == username })?.reply.member {
+            return member.avatarURL
+        }
+        return model.topic?.authorName == username ? model.topic?.member?.avatarURL : nil
+    }
+
+    private func insertMention(_ username: String) {
+        var text = replyDrafts.text(for: topicID)
+        guard let at = text.lastIndex(of: "@") else { return }
+        text.replaceSubrange(at..., with: "@\(username) ")
+        replyDrafts.update(text, for: topicID)
+    }
+
+    @ViewBuilder
+    private var mentionSuggestions: some View {
+        let candidates = mentionCandidates
+        if composerFocused, !candidates.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(candidates, id: \.self) { name in
+                        Button {
+                            insertMention(name)
+                        } label: {
+                            HStack(spacing: 6) {
+                                IdentitySquare(text: name, size: 18, imageURL: mentionAvatar(for: name))
+                                Text(name)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(Theme.ink)
+                                    .lineLimit(1)
+                            }
+                            .padding(.leading, 6)
+                            .padding(.trailing, 11)
+                            .padding(.vertical, 6)
+                            .glassEffect(.regular.interactive(), in: .capsule)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 18)
+            }
+            .frame(height: 42)
+            .transition(.opacity)
+        }
+    }
+
     private var replyDraftBinding: Binding<String> {
         Binding(
             get: { replyDrafts.text(for: topicID) },
@@ -412,39 +500,47 @@ struct TopicDetailView: View {
     /// Floating Liquid Glass composer. The field and the send button live in one
     /// GlassEffectContainer so their glass blends instead of stacking.
     /// 已登录（网页会话）时直接在 app 内输入并发送；未登录时跳网页版。
+    private var composerBar: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            TextField("写下你的回复…", text: replyDraftBinding, axis: .vertical)
+                .lineLimit(1...6)
+                .font(.system(size: 16))
+                .focused($composerFocused)
+                .submitLabel(.send)
+                .onSubmit { Task { await sendReply() } }
+                .padding(.leading, 18)
+                .padding(.trailing, 12)
+                .padding(.vertical, 14)
+                .glassEffect(.regular.interactive(), in: .capsule)
+
+            Button {
+                Task { await sendReply() }
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+            .tint(Theme.accent)
+            .disabled(
+                isSending
+                    || replyDrafts.text(for: topicID)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .isEmpty
+            )
+        }
+    }
+
     private var replyComposer: some View {
         GlassEffectContainer(spacing: 12) {
             if session.isLoggedIn {
-                HStack(alignment: .bottom, spacing: 12) {
-                    TextField("写下你的回复…", text: replyDraftBinding, axis: .vertical)
-                        .lineLimit(1...6)
-                        .font(.system(size: 16))
-                        .focused($composerFocused)
-                        .submitLabel(.send)
-                        .onSubmit { Task { await sendReply() } }
-                        .padding(.leading, 18)
-                        .padding(.trailing, 12)
-                        .padding(.vertical, 14)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-
-                    Button {
-                        Task { await sendReply() }
-                    } label: {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 15, weight: .bold))
-                            .frame(width: 22, height: 22)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
-                    .tint(Theme.accent)
-                    .disabled(
-                        isSending
-                            || replyDrafts.text(for: topicID)
-                                .trimmingCharacters(in: .whitespacesAndNewlines)
-                                .isEmpty
-                    )
+                VStack(alignment: .leading, spacing: 8) {
+                    mentionSuggestions
+                    composerBar
                 }
+                .animation(.snappy(duration: 0.18), value: mentionCandidates)
             } else {
                 HStack(spacing: 12) {
                     Text("写下你的回复…（未登录将打开网页版）")
