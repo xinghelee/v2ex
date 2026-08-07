@@ -9,6 +9,7 @@ enum V2EXError: LocalizedError {
     case webLogin(String)
     case sessionExpired
     case replyFailed(String)
+    case postFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -23,6 +24,7 @@ enum V2EXError: LocalizedError {
         case .webLogin(let reason): return "登录失败：\(reason)"
         case .sessionExpired: return "网页会话已过期，请重新登录"
         case .replyFailed(let detail): return "回复失败：\(detail)"
+        case .postFailed(let detail): return detail
         }
     }
 }
@@ -885,6 +887,126 @@ extension V2EXClient {
                 return String(string[r])
             }
         }
+    }
+
+    /// Publishes a new topic and returns its id.
+    ///
+    /// Neither API version has a write endpoint, so this drives the same web
+    /// form the site itself posts: fetch `/write` for the `once` token, then
+    /// POST it back with the session cookie — exactly how `reply` works.
+    ///
+    /// Success is confirmed only by landing on a real `/t/<id>` URL. Sniffing
+    /// the response body for the text we just sent (as `reply` does) is too
+    /// loose here: a rejection page echoes the draft back into the form, which
+    /// would read as success and lose the user's post.
+    func createTopic(
+        title: String,
+        content: String,
+        nodeName: String,
+        cookie: String,
+        username: String
+    ) async throws -> Int {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { throw V2EXError.postFailed("标题不能为空") }
+        guard !nodeName.isEmpty else { throw V2EXError.postFailed("请先选择节点") }
+        guard !cookie.isEmpty else { throw V2EXError.sessionExpired }
+
+        let formPath = "/write?node=\(nodeName)"
+        let form = try await webHTML(path: formPath, cookie: cookie)
+        if Self.mentionsCaptcha(form) {
+            throw V2EXError.postFailed("V2EX 要求验证码，这一步只能在网页完成")
+        }
+        guard let once = Self.extractOnce(from: form) else {
+            Self.log("createTopic: no once in \(formPath), len=\(form.count)")
+            throw V2EXError.sessionExpired
+        }
+
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "title", value: trimmedTitle),
+            URLQueryItem(name: "content", value: content),
+            URLQueryItem(name: "node_name", value: nodeName),
+            URLQueryItem(name: "syntax", value: "markdown"),
+            URLQueryItem(name: "once", value: once),
+        ]
+        var request = URLRequest(url: URL(string: "https://www.v2ex.com/write")!)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        request.setValue("https://www.v2ex.com" + formPath, forHTTPHeaderField: "Referer")
+        request.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+
+        let (data, response) = try await webSession.data(for: request)
+        let http = response as? HTTPURLResponse
+        let body = String(data: data, encoding: .utf8) ?? ""
+
+        let finalURL = http?.url?.absoluteString ?? ""
+        Self.log("createTopic posted: node=\(nodeName) status=\(http?.statusCode ?? -1) final=\(finalURL) bytes=\(data.count)")
+
+        // Fast path: the redirect landed on the new topic.
+        if let id = Self.topicID(inPath: finalURL) {
+            Self.log("createTopic succeeded via redirect: id=\(id)")
+            return id
+        }
+
+        // An explicit rejection is worth reporting verbatim before anything else.
+        if let problem = Self.htmlField(body, pattern: #"<div[^>]*class="problem[^"]*"[^>]*>([\s\S]*?)</div>"#) {
+            let message = HTMLText.plain(problem)
+            Self.log("createTopic rejected: node=\(nodeName) problem=\(message)")
+            throw V2EXError.postFailed(message)
+        }
+        if Self.mentionsCaptcha(body) {
+            throw V2EXError.postFailed("V2EX 要求验证码，这一步只能在网页完成")
+        }
+
+        // No redirect and no error page. Rather than guess from the HTML, ask
+        // the API whether the topic now exists — the first attempt at this
+        // reported failure for a post that had in fact gone out, and a false
+        // negative is how people end up posting twice.
+        if !username.isEmpty, let id = try? await recentTopicID(matching: trimmedTitle, by: username) {
+            Self.log("createTopic confirmed via API: id=\(id)")
+            return id
+        }
+
+        Self.log("createTopic unconfirmed: node=\(nodeName) status=\(http?.statusCode ?? -1)")
+        throw V2EXError.postFailed("发布结果未确认。请到网页查看是否已发出，避免重复发送。")
+    }
+
+    /// The id of a topic by `username` whose title matches exactly, if V2EX is
+    /// already listing it. Used to confirm a publish whose HTTP response gave
+    /// nothing away.
+    private func recentTopicID(matching title: String, by username: String) async throws -> Int {
+        // V2EX indexes a new topic with a short lag, so give it a couple of tries.
+        for attempt in 0..<3 {
+            if attempt > 0 { try? await Task.sleep(for: .seconds(2)) }
+            guard let topics = try? await topics(byMember: username) else { continue }
+            if let match = topics.first(where: {
+                $0.title.trimmingCharacters(in: .whitespacesAndNewlines) == title
+            }) {
+                return match.id
+            }
+        }
+        throw V2EXError.decoding("未在最近主题中找到刚发布的标题")
+    }
+
+    /// The topic id of a `v2ex.com/t/<digits>` URL, and nothing else.
+    ///
+    /// Anchored at the path root on purpose: this is what decides whether a
+    /// post went out. A loose search for `/t/` anywhere in the string would
+    /// read some unrelated landing page as success and throw the draft away.
+    private static func topicID(inPath url: String) -> Int? {
+        guard let components = URLComponents(string: url) else { return nil }
+        let parts = components.path.split(separator: "/", omittingEmptySubsequences: true)
+        guard parts.count == 2, parts[0] == "t" else { return nil }
+        return Int(parts[1])
+    }
+
+    private static func mentionsCaptcha(_ html: String) -> Bool {
+        html.contains("captcha") || html.contains("验证码")
     }
 
     private func replyOnce(topicID: Int, cookie: String) async throws -> String {

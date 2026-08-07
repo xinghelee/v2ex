@@ -1,17 +1,55 @@
 import SwiftUI
+import UIKit
 
 struct ComposeView: View {
+    /// Called with the new topic's id so the caller can push it.
+    var onPublished: ((Int) -> Void)? = nil
+
     @EnvironmentObject private var drafts: DraftStore
     @EnvironmentObject private var followed: FollowedNodesStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
+    @EnvironmentObject private var session: V2EXSessionStore
+
     @State private var showNodePicker = false
     @State private var showDrafts = false
     @State private var showPublishNotice = false
+    @State private var isPublishing = false
+    @State private var publishError: String?
+    @State private var showPublishError = false
     @FocusState private var focus: Field?
 
     private enum Field { case title, body }
+
+    private var webComposeURL: URL {
+        URL(string: "https://www.v2ex.com/write?node=\(drafts.draft.nodeName)")!
+    }
+
+    @MainActor
+    private func publish() async {
+        guard !isPublishing else { return }
+        isPublishing = true
+        defer { isPublishing = false }
+
+        do {
+            let id = try await V2EXClient.shared.createTopic(
+                title: drafts.draft.title,
+                content: drafts.draft.body,
+                nodeName: drafts.draft.nodeName,
+                cookie: session.cookie,
+                username: session.username
+            )
+            // 只有确认拿到新帖 id 才删草稿 —— 任何不确定的结果都必须把
+            // 用户写的字留在原地。
+            drafts.delete(drafts.activeID)
+            dismiss()
+            onPublished?(id)
+        } catch {
+            publishError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            showPublishError = true
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -43,13 +81,25 @@ struct ComposeView: View {
         .sheet(isPresented: $showDrafts) {
             DraftListView()
         }
-        .alert("发布需要在网页完成", isPresented: $showPublishNotice) {
-            Button("打开 V2EX") {
-                openURL(URL(string: "https://www.v2ex.com/new/\(drafts.draft.nodeName)")!)
+        .alert("发布需要先登录", isPresented: $showPublishNotice) {
+            Button("打开 V2EX 网页并复制正文") {
+                UIPasteboard.general.string = drafts.draft.body
+                openURL(webComposeURL)
             }
             Button("好", role: .cancel) { }
         } message: {
-            Text("V2EX 的 API 2.0 只提供读取接口，没有开放发帖。草稿已保存在本地，可以复制到网页发布。")
+            Text("在设置里完成 V2EX 登录后即可直接在 app 内发布。也可以现在去网页发——正文会复制到剪贴板，到网页长按粘贴即可。")
+        }
+        .alert("没能发布", isPresented: $showPublishError) {
+            Button("改用网页发布") {
+                UIPasteboard.general.string = drafts.draft.body
+                openURL(webComposeURL)
+            }
+            Button("好", role: .cancel) { }
+        } message: {
+            // 原样透传 V2EX 的说法。笼统报「失败」会让人反复重试，
+            // 而额度和冷却类的限制越试越糟。
+            Text(publishError ?? "请稍后重试。")
         }
         .onDisappear { drafts.save() }
     }
@@ -81,17 +131,32 @@ struct ComposeView: View {
 
                 Button {
                     drafts.save()
-                    showPublishNotice = true
+                    // 未登录时没有会话 cookie，表单提交必然失败，直接走网页。
+                    if session.isLoggedIn {
+                        Task { await publish() }
+                    } else {
+                        showPublishNotice = true
+                    }
                 } label: {
-                    Text("发布")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 6)
-                        .background(drafts.isEmpty ? Theme.accent.opacity(0.4) : Theme.accent, in: Capsule())
+                    Group {
+                        if isPublishing {
+                            ProgressView().controlSize(.small).tint(.white)
+                        } else {
+                            Text("发布")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 44)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .background(
+                        drafts.isEmpty ? Theme.accent.opacity(0.4) : Theme.accent,
+                        in: Capsule()
+                    )
                 }
                 .buttonStyle(.plain)
-                .disabled(drafts.isEmpty)
+                .disabled(drafts.isEmpty || isPublishing)
             }
         }
         .padding(.horizontal, Theme.Metric.screenPadding)
@@ -141,10 +206,14 @@ struct ComposeView: View {
 
                 ZStack(alignment: .topLeading) {
                     if drafts.draft.body.isEmpty {
+                        // TextEditor 的文本原点不在 (0,0)：底层 UITextView 有
+                        // textContainerInset.top = 8 与 lineFragmentPadding = 5。
+                        // 占位文字必须让开同样的距离，否则光标会压在它第一个字上。
                         Text("正文（支持 Markdown）")
                             .font(.system(size: 16))
                             .foregroundStyle(Theme.muted)
                             .padding(.top, 8)
+                            .padding(.leading, 5)
                             .allowsHitTesting(false)
                     }
                     TextEditor(text: $drafts.draft.body)

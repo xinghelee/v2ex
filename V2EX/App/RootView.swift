@@ -100,7 +100,12 @@ struct RootView: View {
             }
         }
         .tabBarMinimizeBehavior(.never)
-        .fullScreenCover(isPresented: $showCompose) { ComposeView() }
+        .fullScreenCover(isPresented: $showCompose) {
+            ComposeView { newTopicID in
+                // 发完直接落到自己的帖子上，省得再去首页找。
+                paths[selection, default: NavigationPath()].append(Route.topic(newTopicID))
+            }
+        }
         .sheet(item: $updateChecker.availableRelease, onDismiss: {
             updateChecker.snoozePresentedRelease()
         }) { release in
