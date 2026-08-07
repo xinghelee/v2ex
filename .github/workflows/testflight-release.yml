@@ -2,7 +2,10 @@ name: Publish Release After TestFlight
 
 on:
   schedule:
-    - cron: "4,19,34,49 * * * *"
+    # GitHub 对公开仓库的定时任务是尽力而为，负载高时直接丢弃且不补跑；
+    # 实测每小时四次的 cron 只有约八分之一会真正执行，写密无益。
+    # 需要立刻发布时用下面的 workflow_dispatch 手动触发。
+    - cron: "4 * * * *"
   workflow_dispatch:
 
 permissions:

@@ -16,3 +16,14 @@ xcuserdata/
 
 # 发布配置（含 Team/凭据路径，本地保留不入库）
 .ship.yml
+
+# Python 构建产物
+__pycache__/
+*.pyc
+
+# 签名凭据：仓库公开，任何情况下都不入库
+*.p8
+*.p12
+*.certSigningRequest
+*.mobileprovision
+.env
