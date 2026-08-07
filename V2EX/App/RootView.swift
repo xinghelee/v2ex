@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppTab: Int, CaseIterable, Identifiable {
-    case home, nodes, notifications, profile, search
+    case home, nodes, notifications, profile, search, hackerNews
     var id: Int { rawValue }
 
     static let primary: [AppTab] = [.home, .nodes, .notifications, .profile]
@@ -13,6 +13,7 @@ enum AppTab: Int, CaseIterable, Identifiable {
         case .notifications: return "通知"
         case .profile: return "我的"
         case .search: return "搜索"
+        case .hackerNews: return "HN"
         }
     }
 
@@ -23,6 +24,7 @@ enum AppTab: Int, CaseIterable, Identifiable {
         case .notifications: return "bell"
         case .profile: return "person"
         case .search: return "magnifyingglass"
+        case .hackerNews: return "newspaper"
         }
     }
 
@@ -35,6 +37,8 @@ enum Route: Hashable {
     case member(String)
     case favorites
     case history
+    case nodeCatalog
+    case hackerNews(Int)
     case offline
     case myPosts
     case blocked
@@ -76,7 +80,7 @@ struct RootView: View {
     var body: some View {
         // The native iOS 26 tab bar *is* the design's floating glass pill.
         TabView(selection: tabSelection) {
-            ForEach(AppTab.primary) { tab in
+            ForEach(primaryTabs) { tab in
                 Tab(tab.title, systemImage: tab.icon, value: tab) {
                     NavigationStack(path: binding(for: tab)) {
                         screen(for: tab)
@@ -134,6 +138,21 @@ struct RootView: View {
             KeyboardDismissTapCapture()
                 .allowsHitTesting(false)
         }
+    }
+
+    /// HN 只有在开启且选了「底部标签」时才占一格。标签栏本来就有四项加
+    /// 搜索，第五项是有代价的，所以交给用户决定。
+    /// HN 顶替「节点」而不是追加。
+    ///
+    /// iOS 的标签栏最多 5 格，原来正好是四个主标签加搜索。直接追加会让系统
+    /// 把 HN **和搜索**一起收进「更多」—— 净亏。所以要上标签栏就得腾位置，
+    /// 让出的是「节点」：节点仍可从每篇帖子的顶部标签、搜索、以及「我的」
+    /// 里的节点目录进入，是四个里唯一还有其他入口的。
+    private var primaryTabs: [AppTab] {
+        guard settings.hackerNewsEnabled, settings.hackerNewsPlacement == .tab else {
+            return AppTab.primary
+        }
+        return AppTab.primary.map { $0 == .nodes ? .hackerNews : $0 }
     }
 
     private var autoOfflineTaskID: String {
@@ -203,6 +222,11 @@ struct RootView: View {
             ProfileView()
         case .search:
             SearchView()
+        case .hackerNews:
+            HackerNewsView()
+                .background(Theme.canvas)
+                .navigationTitle("Hacker News")
+                .navigationBarTitleDisplayMode(.inline)
         }
     }
 
@@ -214,6 +238,8 @@ struct RootView: View {
         case .member(let name): MemberView(username: name)
         case .favorites: FavoritesView()
         case .history: HistoryView()
+        case .nodeCatalog: NodesView()
+        case .hackerNews(let id): HNDetailView(itemID: id)
         case .offline: OfflineListView()
         case .myPosts: MyPostsView()
         case .blocked: BlockedView()

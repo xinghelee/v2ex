@@ -21,6 +21,24 @@ enum ThemePreference: String, CaseIterable, Identifiable {
     }
 }
 
+/// Where the experimental Hacker News page lives.
+enum HackerNewsPlacement: String, CaseIterable, Identifiable {
+    /// One more chip at the end of the home rail — costs no tab-bar room.
+    case feed
+    /// Its own tab. Reachable in one tap, at the price of a fifth item in a
+    /// bar that already carries four plus search.
+    case tab
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .feed: return "首页分类"
+        case .tab: return "底部标签"
+        }
+    }
+}
+
 enum LineSpacingPreference: String, CaseIterable, Identifiable {
     case tight, standard, relaxed
     var id: String { rawValue }
@@ -77,6 +95,11 @@ final class AppSettings: ObservableObject {
     @AppStorage("autoSyncFollowedNodes") var autoSyncFollowedNodes = true
     @AppStorage("offlineOnWiFiOnly") var offlineOnWiFiOnly = true
     @AppStorage("dimReadTopics") var dimReadTopics = false
+
+    /// 实验性：首页分类条末尾加一个 Hacker News 页。
+    /// 默认关闭 —— 这是个 V2EX 客户端，第二个数据源应该是用户主动要的。
+    @AppStorage("hackerNewsEnabled") var hackerNewsEnabled = false
+    @AppStorage("hackerNewsPlacement") var hackerNewsPlacement: HackerNewsPlacement = .feed
 
     var bodyFont: Font { .system(size: bodyFontSize) }
     var bodyLineSpacing: CGFloat { bodyFontSize * (lineSpacing.multiplier - 1) }

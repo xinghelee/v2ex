@@ -7,6 +7,8 @@ final class HomeViewModel: ObservableObject {
         case following
         case hot
         case node(name: String, title: String)
+        /// 唯一的非 V2EX 数据源：自成一页，不与本站内容混排。
+        case hackerNews
 
         var title: String {
             switch self {
@@ -14,6 +16,7 @@ final class HomeViewModel: ObservableObject {
             case .following: return "关注"
             case .hot: return "最热"
             case .node(_, let title): return title
+            case .hackerNews: return "HN"
             }
         }
     }
@@ -49,6 +52,9 @@ final class HomeViewModel: ObservableObject {
                 result = try await V2EXClient.shared.topics(inNode: name)
             case .following:
                 result = try await followingFeed(nodes: followedNodes)
+            case .hackerNews:
+                // HN 页自己取数，不经过这里的 V2EX 管道。
+                return
             }
             cache[feed] = result
             // A newer selection may have landed while this request was in flight —
@@ -111,7 +117,12 @@ struct HomeView: View {
     private var feeds: [HomeViewModel.Feed] {
         [.all, .hot, .following] + followed.names.prefix(8).map {
             .node(name: $0, title: NodeCatalog.displayName(for: $0))
-        }
+        } + (showsHackerNewsChip ? [.hackerNews] : [])
+    }
+
+    /// 放进底部标签时就不再占分类条，否则同一个页面会有两个入口。
+    private var showsHackerNewsChip: Bool {
+        settings.hackerNewsEnabled && settings.hackerNewsPlacement == .feed
     }
 
     private var visibleTopics: [V2Topic] {
@@ -164,7 +175,13 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder
     private func feedPage(_ feed: HomeViewModel.Feed) -> some View {
+        if feed == .hackerNews {
+            // 数据模型和 V2EX 完全不同（无节点、无附言、评论是嵌套树），
+            // 所以自成一页而不是塞进上面的话题列表。
+            HackerNewsView()
+        } else {
         ScrollView {
             LazyVStack(spacing: 10) {
                 if let message = model.errorMessage, visibleTopics.isEmpty {
@@ -221,6 +238,7 @@ struct HomeView: View {
             await model.load(feed: feed, followedNodes: followed.names, force: true)
         }
         .scrollPosition(scrollBinding(for: feed))
+        }
     }
 
     private func scrollBinding(for feed: HomeViewModel.Feed) -> Binding<ScrollPosition> {

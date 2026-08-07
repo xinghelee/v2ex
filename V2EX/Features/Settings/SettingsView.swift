@@ -89,6 +89,60 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 0) {
+                    GroupHeader(title: "实验性功能")
+                    CardSection {
+                        HStack(spacing: 14) {
+                            Image(systemName: "flask")
+                                .font(.system(size: 17))
+                                .foregroundStyle(settings.hackerNewsEnabled ? Theme.accent : Theme.faint)
+                                .frame(width: 22)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Hacker News")
+                                    .font(.system(size: 17))
+                                    .kerning(-0.43)
+                                    .foregroundStyle(Theme.ink)
+                                Text("在首页分类条末尾加一页，支持端上翻译为中文")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Theme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 8)
+                            Toggle("", isOn: $settings.hackerNewsEnabled).labelsHidden()
+                        }
+                        .padding(.horizontal, Theme.Metric.cardPadding)
+                        .padding(.vertical, 10)
+
+                        if settings.hackerNewsEnabled {
+                            RowSeparator(leadingInset: 54)
+                            HStack(spacing: 14) {
+                                Color.clear.frame(width: 22)
+                                Text("入口位置")
+                                    .font(.system(size: 17))
+                                    .kerning(-0.43)
+                                    .foregroundStyle(Theme.ink)
+                                Spacer(minLength: 8)
+                                Picker("", selection: $settings.hackerNewsPlacement) {
+                                    ForEach(HackerNewsPlacement.allCases) { placement in
+                                        Text(placement.title).tag(placement)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.segmented)
+                                .frame(width: 190)
+                            }
+                            .padding(.horizontal, Theme.Metric.cardPadding)
+                            .padding(.vertical, 10)
+                        }
+                    }
+
+                    Text("这里的功能可能不稳定，也可能在后续版本中移除。")
+                        .font(Type.label(11))
+                        .foregroundStyle(Theme.faint)
+                        .padding(.horizontal, Theme.Metric.headerPadding)
+                        .padding(.top, 6)
+                }
+
+                VStack(alignment: .leading, spacing: 0) {
                     GroupHeader(title: "关于")
                     CardSection {
                         Button {

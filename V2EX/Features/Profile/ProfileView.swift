@@ -36,6 +36,8 @@ struct ProfileView: View {
     @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var blocks: BlockStore
     @EnvironmentObject private var history: HistoryStore
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var followed: FollowedNodesStore
 
     var body: some View {
         ScrollView {
@@ -173,6 +175,12 @@ struct ProfileView: View {
     /// 唯独这页之前没用。
     private var collectionsGrid: some View {
         VStack(spacing: 0) {
+            // 「节点」让位给 HN 时才出现，避免和标签栏重复。
+            if nodesTabDisplaced {
+                collectionRow(icon: "square.grid.2x2", count: followed.names.count,
+                              title: "节点目录", caption: "已关注", route: .nodeCatalog)
+                RowSeparator(leadingInset: 52)
+            }
             collectionRow(icon: "star", count: favorites.topics.count,
                           title: "收藏", route: .favorites)
             RowSeparator(leadingInset: 52)
@@ -203,6 +211,10 @@ struct ProfileView: View {
     /// 线条，计数换上设计系统那套等宽圆体数字；没有内容的项整行退到 faint，
     /// 于是有东西的几行不必加粗也会自己浮出来。陈列了计数就不再给 chevron，
     /// 两个尾随元素只会互相打架。
+    private var nodesTabDisplaced: Bool {
+        settings.hackerNewsEnabled && settings.hackerNewsPlacement == .tab
+    }
+
     private func collectionRow(
         icon: String,
         count: Int,
