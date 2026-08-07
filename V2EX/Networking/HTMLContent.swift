@@ -350,10 +350,18 @@ enum HTMLText {
         for (entity, replacement) in entities {
             output = output.replacingOccurrences(of: entity, with: replacement)
         }
-        // Numeric entities.
-        while let range = output.range(of: "&#[0-9]+;", options: .regularExpression) {
-            let digits = output[range].dropFirst(2).dropLast()
-            guard let value = UInt32(digits), let scalar = Unicode.Scalar(value) else {
+        // Numeric character references, decimal (`&#39;`) and hex (`&#x27;`).
+        // Hex used to be missed entirely, which is invisible on V2EX — it emits
+        // decimal — but mangles every Hacker News body, since HN escapes with
+        // hex throughout: `I&#x27;m`, `https:&#x2F;&#x2F;`.
+        while let range = output.range(of: "&#[xX]?[0-9A-Fa-f]+;", options: .regularExpression) {
+            var digits = output[range].dropFirst(2).dropLast()
+            var radix = 10
+            if digits.first == "x" || digits.first == "X" {
+                digits = digits.dropFirst()
+                radix = 16
+            }
+            guard let value = UInt32(digits, radix: radix), let scalar = Unicode.Scalar(value) else {
                 output.replaceSubrange(range, with: "")
                 continue
             }
