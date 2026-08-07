@@ -3,7 +3,6 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var token: TokenStore
     @EnvironmentObject private var session: V2EXSessionStore
-    @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openURL) private var openURL
 
@@ -15,6 +14,17 @@ struct SettingsView: View {
                         SettingsRow(icon: "paintbrush.fill", iconColor: Theme.accent, title: "外观") {
                             Chevron()
                         }
+                    }
+                    .buttonStyle(.plain)
+                    RowSeparator(leadingInset: 58)
+
+                    NavigationLink(value: Route.reading) {
+                        SettingsRow(
+                            icon: "book.fill",
+                            iconColor: Theme.accent,
+                            title: "阅读与离线",
+                            subtitle: "阅读进度、自动离线与缓存"
+                        ) { Chevron() }
                     }
                     .buttonStyle(.plain)
                     RowSeparator(leadingInset: 58)

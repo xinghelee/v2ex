@@ -136,7 +136,7 @@ struct RowSeparator: View {
 
 // MARK: - Node / avatar squares
 
-private enum RemoteImageMemoryCache {
+enum RemoteImageMemoryCache {
     static let images: NSCache<NSURL, UIImage> = {
         let cache = NSCache<NSURL, UIImage>()
         cache.countLimit = 500
@@ -151,6 +151,10 @@ private enum RemoteImageMemoryCache {
     static func insert(_ image: UIImage, for url: URL) {
         let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
         images.setObject(image, forKey: url as NSURL, cost: cost)
+    }
+
+    static func clear() {
+        images.removeAllObjects()
     }
 }
 
@@ -337,15 +341,13 @@ extension ChipRail where Trailing == EmptyView {
 
 // MARK: - Small parts
 
-/// "↓ 已离线" marker.
+/// Quiet offline marker for topic metadata rows.
 struct OfflineBadge: View {
     var body: some View {
-        Text("↓ 已离线")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Theme.amber)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Theme.amberSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        Image(systemName: "arrow.down.circle.fill")
+            .font(.system(size: 10))
+            .foregroundStyle(Theme.faint)
+            .accessibilityLabel("已离线")
     }
 }
 

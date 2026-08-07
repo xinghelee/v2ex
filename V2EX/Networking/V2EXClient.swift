@@ -43,6 +43,7 @@ actor V2EXClient {
     static let shared = V2EXClient()
 
     private let session: URLSession
+    private let responseCache: URLCache
     /// Browser-identifying session for the web forms (login/reply) — v2ex.com
     /// serves different markup to the API User-Agent.
     private let webSession: URLSession
@@ -55,13 +56,15 @@ actor V2EXClient {
     init() {
         let configuration = URLSessionConfiguration.default
         configuration.requestCachePolicy = .useProtocolCachePolicy
-        configuration.urlCache = URLCache(memoryCapacity: 8 << 20, diskCapacity: 64 << 20)
+        let responseCache = URLCache(memoryCapacity: 8 << 20, diskCapacity: 64 << 20)
+        configuration.urlCache = responseCache
         configuration.timeoutIntervalForRequest = 20
         configuration.httpAdditionalHeaders = [
             "User-Agent": "V2EX-SwiftUI/1.0 (iOS)",
             "Accept": "application/json",
         ]
         session = URLSession(configuration: configuration)
+        self.responseCache = responseCache
 
         let webConfiguration = URLSessionConfiguration.ephemeral
         webConfiguration.timeoutIntervalForRequest = 20
@@ -72,6 +75,14 @@ actor V2EXClient {
         webSession = URLSession(configuration: webConfiguration)
 
         decoder = JSONDecoder()
+    }
+
+    func cacheUsage() -> Int {
+        responseCache.currentMemoryUsage + responseCache.currentDiskUsage
+    }
+
+    func clearCache() {
+        responseCache.removeAllCachedResponses()
     }
 
     // MARK: - API 1.0 (public)
@@ -623,7 +634,10 @@ extension V2EXClient {
 
     /// 一次抓取话题页，同时解析浏览数与附言 —— 两者都来自同一个页面，
     /// 分开请求会浪费一次完整的网页往返（热门帖首屏明显变慢）。
-    func topicPageExtras(id: Int, cookie: String) async throws -> (views: Int?, appends: [TopicAppend]) {
+    func topicPageExtras(
+        id: Int,
+        cookie: String
+    ) async throws -> (views: Int?, appends: [TopicAppend], proMembers: Set<String>) {
         var request = URLRequest(url: URL(string: "https://www.v2ex.com/t/\(id)")!)
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
@@ -639,7 +653,40 @@ extension V2EXClient {
         if let range = html.range(of: #"([\d,]+)\s*(?:views|次点击)"#, options: .regularExpression) {
             views = Int(String(html[range]).filter(\.isNumber))
         }
-        return (views, Self.extractAppends(from: html))
+        return (views, Self.extractAppends(from: html), Self.extractProMembers(from: html))
+    }
+
+    /// Usernames wearing V2EX's PRO badge on this page.
+    ///
+    /// Neither API version carries the field, so the web page is the only
+    /// source. The markup puts the badge in a container that follows the
+    /// author's own link:
+    /// `<a href="/member/ybz">ybz</a> … <div class="badges"><div class="badge pro">PRO</div></div>`
+    /// so each badge belongs to the nearest `/member/` link before it.
+    static func extractProMembers(from html: String) -> Set<String> {
+        guard let memberPattern = try? NSRegularExpression(pattern: #"/member/([A-Za-z0-9_-]+)"#),
+              let badgePattern = try? NSRegularExpression(pattern: #"<div class="badge pro">"#)
+        else { return [] }
+
+        let text = html as NSString
+        let whole = NSRange(location: 0, length: text.length)
+        let members = memberPattern.matches(in: html, range: whole)
+        guard !members.isEmpty else { return [] }
+
+        var found: Set<String> = []
+        var cursor = 0
+        // Both match lists come back in document order, so a single forward
+        // walk pairs every badge with its owner.
+        for badge in badgePattern.matches(in: html, range: whole) {
+            while cursor + 1 < members.count,
+                  members[cursor + 1].range.location < badge.range.location {
+                cursor += 1
+            }
+            let owner = members[cursor]
+            guard owner.range.location < badge.range.location, owner.numberOfRanges > 1 else { continue }
+            found.insert(text.substring(with: owner.range(at: 1)))
+        }
+        return found
     }
 
     /// 抓取楼主 APPEND（追加内容）。API 1.0/2.0 都不返回这个字段，

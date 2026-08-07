@@ -2,8 +2,6 @@ import SwiftUI
 
 struct AppearanceSettingsView: View {
     @EnvironmentObject private var settings: AppSettings
-    @EnvironmentObject private var offline: OfflineStore
-    @State private var showClearConfirm = false
 
     var body: some View {
         ScrollView {
@@ -11,7 +9,6 @@ struct AppearanceSettingsView: View {
                 themeSection
                 paletteSection
                 bodySection
-                readingSection
             }
             .padding(.top, 8)
             .padding(.bottom, 40)
@@ -20,10 +17,6 @@ struct AppearanceSettingsView: View {
         .background(Theme.canvas)
         .navigationTitle("外观")
         .navigationBarTitleDisplayMode(.large)
-        .confirmationDialog("清空离线缓存？", isPresented: $showClearConfirm, titleVisibility: .visible) {
-            Button("清空 \(offline.formattedSize)", role: .destructive) { offline.clearAll() }
-            Button("取消", role: .cancel) { }
-        }
     }
 
     // MARK: 主题
@@ -228,65 +221,4 @@ struct AppearanceSettingsView: View {
         .frame(minHeight: Theme.Metric.rowHeight)
     }
 
-    // MARK: 阅读与离线
-
-    private var readingSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            GroupHeader(title: "阅读与离线")
-            CardSection {
-                toggleRow(title: "记住阅读进度", isOn: $settings.rememberReadingPosition)
-                RowSeparator()
-                toggleRow(
-                    title: "自动离线关注节点",
-                    subtitle: settings.offlineOnWiFiOnly ? "仅 Wi-Fi 下载" : "使用任意网络下载",
-                    isOn: $settings.autoOfflineFollowedNodes
-                )
-                RowSeparator()
-                toggleRow(title: "仅在 Wi-Fi 下载", isOn: $settings.offlineOnWiFiOnly)
-                RowSeparator()
-                toggleRow(title: "标记已读的话题变灰", isOn: $settings.dimReadTopics)
-                RowSeparator()
-                Button {
-                    showClearConfirm = true
-                } label: {
-                    HStack {
-                        Text("清空离线缓存")
-                            .font(.system(size: 17))
-                            .kerning(-0.43)
-                            .foregroundStyle(Theme.ink)
-                        Spacer()
-                        Text(offline.formattedSize)
-                            .font(.system(size: 15))
-                            .foregroundStyle(Theme.muted)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: Theme.Metric.rowHeight)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func toggleRow(title: String, subtitle: String? = nil, isOn: Binding<Bool>) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 17))
-                    .kerning(-0.43)
-                    .foregroundStyle(Theme.ink)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.muted)
-                }
-            }
-            Spacer()
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(Theme.accent)
-        }
-        .padding(.horizontal, 16)
-        .frame(minHeight: Theme.Metric.rowHeight)
-    }
 }

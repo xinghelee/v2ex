@@ -188,6 +188,13 @@ struct HomeView: View {
                             }
                         }
                         .buttonStyle(.row)
+                        // CardSection insets its content by 16 on top of the
+                        // screen padding, so the corner sits further in here.
+                        .promotionBadge(
+                            for: featured,
+                            trailing: Theme.Metric.screenPadding + 16,
+                            top: 16
+                        )
                     }
 
                     TopicListCard(items: Array(visibleTopics.dropFirst())) { topic in
@@ -200,6 +207,7 @@ struct HomeView: View {
                             )
                         }
                         .buttonStyle(.row)
+                        .promotionBadge(for: topic)
                     }
                 }
             }

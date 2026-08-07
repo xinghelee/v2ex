@@ -11,15 +11,17 @@ struct TopicDetailView: View {
     @EnvironmentObject private var readState: ReadStateStore
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var session: V2EXSessionStore
+    @EnvironmentObject private var replyDrafts: ReplyDraftStore
+    @EnvironmentObject private var history: HistoryStore
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
 
-    @State private var replyDraft = ""
     @State private var replyError: String?
     @State private var showReplyError = false
     @State private var isSending = false
     @State private var isSyncingFavorite = false
     @State private var isComposerHidden = false
+    @State private var showShareCard = false
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -88,7 +90,22 @@ struct TopicDetailView: View {
                 cache: topicCache,
                 offline: offline
             )
+            // 载入之后才记，历史列表要靠这份话题体自己把行画出来。
+            if let topic = model.topic { history.record(topic) }
         }
+        .sheet(isPresented: $showShareCard) {
+            if let topic = model.topic {
+                TopicShareCardSheet(topic: topic)
+            }
+        }
+        .onDisappear { replyDrafts.save() }
+    }
+
+    private var replyDraftBinding: Binding<String> {
+        Binding(
+            get: { replyDrafts.text(for: topicID) },
+            set: { replyDrafts.update($0, for: topicID) }
+        )
     }
 
     // MARK: Toolbar
@@ -148,7 +165,12 @@ struct TopicDetailView: View {
                         )
                     }
                     if let topic = model.topic {
-                        ShareLink(item: topic.webURL) { Label("分享", systemImage: "square.and.arrow.up") }
+                        ShareLink(item: topic.webURL) { Label("分享链接", systemImage: "link") }
+                        Button {
+                            showShareCard = true
+                        } label: {
+                            Label("分享为卡片", systemImage: "square.and.arrow.up")
+                        }
                         Button {
                             openURL(topic.webURL)
                         } label: {
@@ -187,10 +209,13 @@ struct TopicDetailView: View {
                         HStack(spacing: 10) {
                             IdentitySquare(text: topic.authorName, size: 34, imageURL: topic.member?.avatarURL)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(topic.authorName)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(Theme.ink)
-                                    .lineLimit(1)
+                                HStack(spacing: 6) {
+                                    Text(topic.authorName)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(Theme.ink)
+                                        .lineLimit(1)
+                                    if model.proMembers.contains(topic.authorName) { ProBadge() }
+                                }
                                 Text(RelativeTime.string(from: topic.activityDate))
                                     .font(.system(size: 12))
                                     .foregroundStyle(Theme.muted)
@@ -330,11 +355,15 @@ struct TopicDetailView: View {
         } else {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 VStack(alignment: .leading, spacing: 0) {
-                    ReplyRow(item: item, onReply: { mention in
-                        setComposerHidden(false)
-                        replyDraft = mention
-                        composerFocused = true
-                    })
+                    ReplyRow(
+                        item: item,
+                        isPro: model.proMembers.contains(item.reply.authorName),
+                        onReply: { mention in
+                            setComposerHidden(false)
+                            replyDrafts.update(mention, for: topicID)
+                            composerFocused = true
+                        }
+                    )
                         .id(item.id)
                         .onAppear {
                             guard settings.rememberReadingPosition else { return }
@@ -387,7 +416,7 @@ struct TopicDetailView: View {
         GlassEffectContainer(spacing: 12) {
             if session.isLoggedIn {
                 HStack(alignment: .bottom, spacing: 12) {
-                    TextField("写下你的回复…", text: $replyDraft, axis: .vertical)
+                    TextField("写下你的回复…", text: replyDraftBinding, axis: .vertical)
                         .lineLimit(1...6)
                         .font(.system(size: 16))
                         .focused($composerFocused)
@@ -409,7 +438,12 @@ struct TopicDetailView: View {
                     .buttonBorderShape(.circle)
                     .controlSize(.large)
                     .tint(Theme.accent)
-                    .disabled(isSending || replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        isSending
+                            || replyDrafts.text(for: topicID)
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                                .isEmpty
+                    )
                 }
             } else {
                 HStack(spacing: 12) {
@@ -450,13 +484,14 @@ struct TopicDetailView: View {
     }
 
     private func sendReply() async {
-        let content = replyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let content = replyDrafts.text(for: topicID)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty, !isSending else { return }
         isSending = true
         defer { isSending = false }
         do {
             try await V2EXClient.shared.reply(topicID: topicID, content: content, cookie: session.cookie)
-            replyDraft = ""
+            replyDrafts.clear(topicID: topicID)
             composerFocused = false
             await model.load(
                 id: topicID,
@@ -481,6 +516,7 @@ struct TopicDetailView: View {
 
 struct ReplyRow: View {
     let item: ThreadedReply
+    var isPro = false
     var onReply: ((String) -> Void)? = nil
     @EnvironmentObject private var settings: AppSettings
 
@@ -509,6 +545,7 @@ struct ReplyRow: View {
                             .padding(.vertical, 1)
                             .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
+                    if isPro { ProBadge() }
                     Text(RelativeTime.string(from: item.reply.date))
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.muted)

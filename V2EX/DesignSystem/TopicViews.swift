@@ -53,6 +53,99 @@ struct ReplyCount: View {
     }
 }
 
+// MARK: - PRO badge
+
+/// V2EX's paid-membership mark. Filled ink rather than the accent, because the
+/// accent already means "楼主" two glyphs away and a second saturated chip there
+/// reads as one blurred label.
+struct ProBadge: View {
+    var body: some View {
+        Text("PRO")
+            .font(.system(size: 9, weight: .heavy, design: .rounded))
+            .kerning(0.3)
+            .foregroundStyle(Theme.card)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Theme.ink.opacity(0.75), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .accessibilityLabel("PRO 会员")
+    }
+}
+
+// MARK: - Promotion badge
+
+enum PromotionBadgeMetric {
+    static let height: CGFloat = 20
+    /// Gap the row leaves under the badge before the reply count resumes.
+    static let gap: CGFloat = 6
+}
+
+/// Marks a topic sitting in V2EX's `promotions` node, and explains what that
+/// means on tap — an unexplained badge is just decoration.
+struct PromotionBadge: View {
+    @State private var showsExplanation = false
+
+    var body: some View {
+        Button {
+            showsExplanation = true
+        } label: {
+            Image(systemName: "megaphone.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.amber)
+                .frame(height: PromotionBadgeMetric.height)
+                .padding(.horizontal, 7)
+                .background(Theme.amberSoft, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("推广内容，点按查看说明")
+        .popover(isPresented: $showsExplanation) {
+            explanation.presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private var explanation: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("推广内容", systemImage: "megaphone.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+
+            Text("这条发布在 V2EX 的「推广」节点，是站方允许的商业内容，不是普通用户讨论。")
+                .font(.system(size: 13))
+                .lineSpacing(3)
+                .foregroundStyle(Theme.body)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(width: 268)
+    }
+}
+
+extension View {
+    /// Lays the promotion marker over a row's top-right corner.
+    ///
+    /// Deliberately applied *outside* the `NavigationLink` it decorates: a
+    /// button nested inside a link's label never receives the tap, so the badge
+    /// would look interactive and do nothing. Insets are passed in because the
+    /// featured card and the list row bring different padding to the corner.
+    /// Defaults land the badge in a `TopicRow`'s corner — they mirror that row's
+    /// own horizontal and vertical padding. The featured card passes its own.
+    @ViewBuilder
+    func promotionBadge(
+        for topic: V2Topic,
+        trailing: CGFloat = Theme.Metric.cardPadding,
+        top: CGFloat = 14
+    ) -> some View {
+        if topic.isPromotionNode {
+            overlay(alignment: .topTrailing) {
+                PromotionBadge()
+                    .padding(.trailing, trailing)
+                    .padding(.top, top)
+            }
+        } else {
+            self
+        }
+    }
+}
+
 // MARK: - Featured card
 
 /// Lead card at the top of a feed. Title-led, one quiet meta line.
@@ -158,7 +251,12 @@ struct TopicRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             ReplyCount(value: topic.replies)
-                .padding(.top, 1)
+                // The promotion badge is overlaid from outside the enclosing
+                // NavigationLink, so it cannot push this down itself — the row
+                // reserves the corner for it here instead.
+                .padding(.top, topic.isPromotionNode
+                    ? PromotionBadgeMetric.height + PromotionBadgeMetric.gap
+                    : 1)
         }
         .padding(.horizontal, Theme.Metric.cardPadding)
         .padding(.vertical, 14)

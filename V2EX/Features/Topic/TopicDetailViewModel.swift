@@ -23,6 +23,9 @@ final class TopicDetailViewModel: ObservableObject {
     @Published private(set) var loadedFromOffline = false
     @Published private(set) var topicViews: Int?
     @Published private(set) var contentBlocks: [ContentBlock] = []
+    /// PRO members seen on the web page. Scraped, not cached to disk — a
+    /// subscription can lapse, and a stale badge is worse than none.
+    @Published private(set) var proMembers: Set<String> = []
     @Published var filter: ReplyFilter = .byFloor
 
     private var rawReplies: [V2Reply] = []
@@ -159,6 +162,7 @@ final class TopicDetailViewModel: ObservableObject {
                 setAppends(extras.appends)
                 changed = true
             }
+            if extras.proMembers != proMembers { proMembers = extras.proMembers }
             if changed { saveCache(to: cache) }
         }
     }
@@ -314,20 +318,27 @@ final class TopicDetailViewModel: ObservableObject {
         return bodyWithoutQuotePrefix(source, hasQuote: reply.quoted != nil)
     }
 
+    /// Removes the opening `@someone`(` #12`) now that the quote block shows it,
+    /// leaving the rest of the body's markup intact.
+    ///
+    /// This used to flatten the whole body with `HTMLText.plain` first, which
+    /// also dissolved every other tag in it: a reply opening with
+    /// `@a @b @c 好了` came out as text, so b and c stopped being tappable
+    /// links — and so did any URL further down the same reply.
     private static func bodyWithoutQuotePrefix(_ source: String, hasQuote: Bool) -> String {
         guard hasQuote else { return source }
 
-        let plain = HTMLText.plain(source)
-        guard plain.hasPrefix("@") else { return source }
+        // The mention is an anchor in rendered HTML and bare text in the raw
+        // `content` fallback, so accept either shape.
+        let pattern = #"^\s*@\s*(?:<a\b[^>]*>[^<]*</a>|[A-Za-z0-9_-]+)\s*(?:#\d+)?\s*"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+              match.range.length > 0
+        else { return source }
 
-        // Drop everything up to the first whitespace run after the mention.
-        var remainder = Substring(plain).dropFirst()
-        remainder = remainder.drop { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
-        remainder = remainder.drop { $0.isWhitespace }
-        if remainder.first == "#" {
-            remainder = remainder.dropFirst().drop { $0.isNumber }
-            remainder = remainder.drop { $0.isWhitespace }
-        }
-        return remainder.isEmpty ? source : String(remainder)
+        let remainder = (source as NSString).replacingCharacters(in: match.range, with: "")
+        // A reply that was nothing but the mention keeps its original body
+        // rather than rendering as an empty bubble.
+        return HTMLText.plain(remainder).isEmpty ? source : remainder
     }
 }

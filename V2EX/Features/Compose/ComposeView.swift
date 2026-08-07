@@ -7,6 +7,7 @@ struct ComposeView: View {
     @Environment(\.openURL) private var openURL
 
     @State private var showNodePicker = false
+    @State private var showDrafts = false
     @State private var showPublishNotice = false
     @FocusState private var focus: Field?
 
@@ -39,6 +40,9 @@ struct ComposeView: View {
                 drafts.save()
             }
         }
+        .sheet(isPresented: $showDrafts) {
+            DraftListView()
+        }
         .alert("发布需要在网页完成", isPresented: $showPublishNotice) {
             Button("打开 V2EX") {
                 openURL(URL(string: "https://www.v2ex.com/new/\(drafts.draft.nodeName)")!)
@@ -51,33 +55,44 @@ struct ComposeView: View {
     }
 
     private var navBar: some View {
-        HStack {
-            Button("取消") {
-                drafts.save()
-                dismiss()
-            }
-            .font(.system(size: 17))
-            .foregroundStyle(Theme.accent)
-
-            Spacer()
+        ZStack {
             Text("新话题")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Theme.ink)
-            Spacer()
 
-            Button {
-                drafts.save()
-                showPublishNotice = true
-            } label: {
-                Text("发布")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .background(drafts.isEmpty ? Theme.accent.opacity(0.4) : Theme.accent, in: Capsule())
+            HStack {
+                Button("取消") {
+                    drafts.save()
+                    dismiss()
+                }
+                .font(.system(size: 17))
+                .foregroundStyle(Theme.accent)
+
+                Spacer()
+
+                Button {
+                    showDrafts = true
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 16, weight: .medium))
+                        .frame(width: 32, height: 32)
+                }
+                .accessibilityLabel("管理草稿")
+
+                Button {
+                    drafts.save()
+                    showPublishNotice = true
+                } label: {
+                    Text("发布")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(drafts.isEmpty ? Theme.accent.opacity(0.4) : Theme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(drafts.isEmpty)
             }
-            .buttonStyle(.plain)
-            .disabled(drafts.isEmpty)
         }
         .padding(.horizontal, Theme.Metric.screenPadding)
         .padding(.top, 8)
@@ -201,6 +216,78 @@ struct ComposeView: View {
     private func insert(_ text: String) {
         drafts.draft.body += text
         drafts.save()
+    }
+}
+
+// MARK: - Draft list
+
+private struct DraftListView: View {
+    @EnvironmentObject private var drafts: DraftStore
+    @Environment(\.dismiss) private var dismiss
+
+    private var sortedDrafts: [DraftStore.Draft] {
+        drafts.drafts.sorted { $0.savedAt > $1.savedAt }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(sortedDrafts) { draft in
+                    Button {
+                        drafts.select(draft.id)
+                        dismiss()
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(drafts.title(for: draft))
+                                    .font(.headline)
+                                    .foregroundStyle(Theme.ink)
+                                    .lineLimit(2)
+                                Text(draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                     ? draft.nodeTitle
+                                     : draft.body)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Theme.muted)
+                                    .lineLimit(2)
+                                Text(draft.savedAt, style: .relative)
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.muted)
+                            }
+                            Spacer(minLength: 8)
+                            if draft.id == drafts.activeID {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Theme.accent)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions {
+                        Button(role: .destructive) {
+                            drafts.delete(draft.id)
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("草稿")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        drafts.createDraft()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("新建草稿")
+                }
+            }
+        }
     }
 }
 

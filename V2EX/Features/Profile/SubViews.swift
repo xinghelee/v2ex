@@ -51,6 +51,102 @@ struct FavoritesView: View {
     }
 }
 
+// MARK: - 浏览历史
+
+struct HistoryView: View {
+    @EnvironmentObject private var history: HistoryStore
+    @EnvironmentObject private var offline: OfflineStore
+    @State private var showClearConfirm = false
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M 月 d 日"
+        return formatter
+    }()
+
+    /// 按天分组。`history.entries` 已按时间倒序，所以顺着走一遍即可，
+    /// 分完组不必再排序。
+    private var sections: [(title: String, entries: [HistoryStore.Entry])] {
+        var order: [String] = []
+        var grouped: [String: [HistoryStore.Entry]] = [:]
+        for entry in history.entries {
+            let title = Self.dayTitle(for: entry.viewedAt)
+            if grouped[title] == nil { order.append(title) }
+            grouped[title, default: []].append(entry)
+        }
+        return order.map { ($0, grouped[$0] ?? []) }
+    }
+
+    private static func dayTitle(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "今天" }
+        if calendar.isDateInYesterday(date) { return "昨天" }
+        return dayFormatter.string(from: date)
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                if history.entries.isEmpty {
+                    EmptyStateCard(
+                        icon: "clock.arrow.circlepath",
+                        title: "还没有浏览记录",
+                        message: "读过的话题会出现在这里，保留 \(HistoryStore.retentionDays) 天。"
+                    )
+                    .padding(.top, 8)
+                } else {
+                    ForEach(sections, id: \.title) { section in
+                        GroupHeader(title: section.title)
+                        TopicListCard(items: section.entries) { entry in
+                            NavigationLink(value: Route.topic(entry.topic.id)) {
+                                TopicRow(
+                                    topic: entry.topic,
+                                    isOffline: offline.isOffline(entry.topic.id)
+                                )
+                            }
+                            .buttonStyle(.row)
+                            .promotionBadge(for: entry.topic)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    history.remove(id: entry.topic.id)
+                                } label: {
+                                    Label("从历史中移除", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+
+                    Text("记录保留 \(HistoryStore.retentionDays) 天，只存在这台设备上。")
+                        .font(Type.meta(12))
+                        .foregroundStyle(Theme.faint)
+                        .padding(.horizontal, Theme.Metric.headerPadding)
+                        .padding(.top, 6)
+                }
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.canvas)
+        .navigationTitle("浏览历史")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !history.entries.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("清空") { showClearConfirm = true }
+                        .foregroundStyle(Theme.body)
+                }
+            }
+        }
+        .confirmationDialog("清空浏览历史？", isPresented: $showClearConfirm, titleVisibility: .visible) {
+            Button("清空", role: .destructive) { history.clear() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("共 \(history.entries.count) 条记录，清空后无法恢复。")
+        }
+    }
+}
+
 // MARK: - 稍后读 / 离线
 
 struct OfflineListView: View {
@@ -89,7 +185,7 @@ struct OfflineListView: View {
                 } else {
                     TopicListCard(items: offline.bundles) { saved in
                         NavigationLink(value: Route.topic(saved.topic.id)) {
-                            TopicRow(topic: saved.topic, isOffline: true)
+                            TopicRow(topic: saved.topic, isOffline: false)
                         }
                         .buttonStyle(.row)
                         .contextMenu {

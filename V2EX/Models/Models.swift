@@ -105,6 +105,12 @@ struct V2Topic: Codable, Identifiable, Hashable {
     var authorName: String { member?.username ?? "" }
     var nodeTitle: String { node?.title ?? node?.name ?? "" }
 
+    /// Posted to V2EX's own `promotions` node — i.e. the site itself has already
+    /// declared this commercial. Distinct from `HomeViewModel.isPromotion`, which
+    /// guesses at ad copy by keyword to hide spam that hides in ordinary nodes;
+    /// this one is authoritative, so it marks rather than hides.
+    var isPromotionNode: Bool { node?.name == "promotions" }
+
     /// Timestamp the list rows sort and display on — last activity, like the site.
     var activityDate: Date? {
         guard let stamp = lastTouched ?? created else { return nil }

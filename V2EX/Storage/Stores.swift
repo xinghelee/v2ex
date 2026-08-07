@@ -218,6 +218,64 @@ final class FavoritesStore: ObservableObject {
     }
 }
 
+// MARK: - 浏览历史
+
+/// 读过的话题，按最近浏览排序，保留 30 天。
+///
+/// 与 ReadStateStore 的区别：那个只记「这条读过没」用来置灰，是一堆 id；
+/// 这里存完整话题以便离线也能把列表画出来，代价是条数要设上限。
+final class HistoryStore: ObservableObject {
+    struct Entry: Codable, Identifiable {
+        let topic: V2Topic
+        let viewedAt: Date
+        var id: Int { topic.id }
+    }
+
+    /// 超过这个天数的记录在每次启动和每次写入时被丢弃。
+    static let retentionDays = 30
+    /// 上限存在的理由是每条都带完整话题体，无限增长会让启动时的解码变慢。
+    private let maxCount = 500
+
+    @Published private(set) var entries: [Entry] = []
+
+    private let file = DiskStore.url(for: "history.json")
+
+    init() {
+        entries = Self.pruned(DiskStore.load([Entry].self, from: file) ?? [], limit: maxCount)
+    }
+
+    /// 重复浏览同一话题只更新时间并移到最前，不留多条。
+    func record(_ topic: V2Topic) {
+        var next = entries.filter { $0.topic.id != topic.id }
+        next.insert(Entry(topic: topic, viewedAt: Date()), at: 0)
+        entries = Self.pruned(next, limit: maxCount)
+        persist()
+    }
+
+    func remove(id: Int) {
+        entries.removeAll { $0.topic.id == id }
+        persist()
+    }
+
+    func clear() {
+        entries = []
+        persist()
+    }
+
+    private func persist() {
+        DiskStore.save(entries, to: file)
+    }
+
+    private static func pruned(_ list: [Entry], limit: Int) -> [Entry] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? .distantPast
+        return Array(
+            list.filter { $0.viewedAt > cutoff }
+                .sorted { $0.viewedAt > $1.viewedAt }
+                .prefix(limit)
+        )
+    }
+}
+
 // MARK: - Topic detail cache
 
 /// Automatic stale-while-revalidate cache for topic detail screens. This is
@@ -238,8 +296,13 @@ final class TopicDetailCacheStore: ObservableObject {
     private let maxDiskByteSize = 32 * 1_024 * 1_024
     private let maxMemoryEntryCount = 12
 
+    @Published private(set) var byteSize: Int = 0
     private var memory: [Int: Snapshot] = [:]
     private var memoryOrder: [Int] = []
+
+    init() {
+        reloadDiskUsage()
+    }
 
     func snapshot(for id: Int) -> Snapshot? {
         if let cached = memory[id] {
@@ -272,6 +335,19 @@ final class TopicDetailCacheStore: ObservableObject {
         remember(snapshot, for: topic.id)
         DiskStore.save(snapshot, to: fileURL(for: topic.id))
         pruneDiskCache()
+        reloadDiskUsage()
+    }
+
+    func clearAll() {
+        memory.removeAll()
+        memoryOrder.removeAll()
+        try? FileManager.default.removeItem(at: directory)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        reloadDiskUsage()
+    }
+
+    func reloadDiskUsage() {
+        byteSize = DiskStore.byteSize(of: directory)
     }
 
     private func fileURL(for id: Int) -> URL {
@@ -321,7 +397,11 @@ final class OfflineStore: ObservableObject {
         let topic: V2Topic
         let replies: [V2Reply]
         let savedAt: Date
+        /// `nil` means a bundle written by an older app version and is treated
+        /// as a user-saved item so automatic pruning can never remove it.
+        let automatic: Bool?
         var id: Int { topic.id }
+        var isAutomatic: Bool { automatic == true }
     }
 
     @Published private(set) var bundles: [SavedTopic] = []
@@ -337,9 +417,34 @@ final class OfflineStore: ObservableObject {
 
     func bundle(for id: Int) -> SavedTopic? { bundles.first { $0.id == id } }
 
-    func save(topic: V2Topic, replies: [V2Reply]) {
-        let saved = SavedTopic(topic: topic, replies: replies, savedAt: Date())
+    func save(topic: V2Topic, replies: [V2Reply], automatic: Bool = false) {
+        let wasSavedManually = bundle(for: topic.id).map { !$0.isAutomatic } ?? false
+        let saved = SavedTopic(
+            topic: topic,
+            replies: replies,
+            savedAt: Date(),
+            automatic: automatic && !wasSavedManually
+        )
         DiskStore.save(saved, to: directory.appendingPathComponent("\(topic.id).json"))
+        reload()
+    }
+
+    func needsAutomaticRefresh(for topic: V2Topic) -> Bool {
+        guard let saved = bundle(for: topic.id) else { return true }
+        return saved.topic.replies < topic.replies || saved.replies.count < topic.replies
+    }
+
+    func pruneAutomatic(keeping limit: Int) {
+        let expired = bundles
+            .filter(\.isAutomatic)
+            .sorted { $0.savedAt > $1.savedAt }
+            .dropFirst(limit)
+        guard !expired.isEmpty else { return }
+        for bundle in expired {
+            try? FileManager.default.removeItem(
+                at: directory.appendingPathComponent("\(bundle.id).json")
+            )
+        }
         reload()
     }
 
@@ -364,14 +469,11 @@ final class OfflineStore: ObservableObject {
             at: directory, includingPropertiesForKeys: [.fileSizeKey])) ?? []
 
         var loaded: [SavedTopic] = []
-        var total = 0
         for file in files where file.pathExtension == "json" {
             if let saved = DiskStore.load(SavedTopic.self, from: file) { loaded.append(saved) }
-            let values = try? file.resourceValues(forKeys: [.fileSizeKey])
-            total += values?.fileSize ?? 0
         }
         bundles = loaded.sorted { $0.savedAt > $1.savedAt }
-        byteSize = total
+        byteSize = DiskStore.byteSize(of: directory)
     }
 }
 
@@ -464,7 +566,8 @@ final class BlockStore: ObservableObject {
 
 @MainActor
 final class DraftStore: ObservableObject {
-    struct Draft: Codable {
+    struct Draft: Codable, Identifiable {
+        var id: UUID
         var nodeName: String
         var nodeTitle: String
         var title: String
@@ -472,17 +575,127 @@ final class DraftStore: ObservableObject {
         var savedAt: Date
     }
 
-    @Published var draft: Draft
-    private let file = DiskStore.url(for: "draft.json")
+    private struct Container: Codable {
+        var drafts: [Draft]
+        var activeID: UUID
+    }
+
+    private struct LegacyDraft: Codable {
+        var nodeName: String
+        var nodeTitle: String
+        var title: String
+        var body: String
+        var savedAt: Date
+    }
+
+    @Published private(set) var drafts: [Draft]
+    @Published private(set) var activeID: UUID
+
+    private let file = DiskStore.url(for: "drafts.json")
+    private let legacyFile = DiskStore.url(for: "draft.json")
+    private var saveTask: Task<Void, Never>?
 
     init() {
-        draft = DiskStore.load(Draft.self, from: file)
-            ?? Draft(nodeName: "create", nodeTitle: "分享创造", title: "", body: "", savedAt: Date())
+        if let saved = DiskStore.load(Container.self, from: file), !saved.drafts.isEmpty {
+            drafts = saved.drafts
+            activeID = saved.drafts.contains { $0.id == saved.activeID }
+                ? saved.activeID
+                : saved.drafts[0].id
+        } else if let legacy = DiskStore.load(LegacyDraft.self, from: legacyFile) {
+            let migrated = Draft(
+                id: UUID(),
+                nodeName: legacy.nodeName,
+                nodeTitle: legacy.nodeTitle,
+                title: legacy.title,
+                body: legacy.body,
+                savedAt: legacy.savedAt
+            )
+            drafts = [migrated]
+            activeID = migrated.id
+            persist()
+        } else {
+            let initial = Self.emptyDraft()
+            drafts = [initial]
+            activeID = initial.id
+        }
+    }
+
+    var draft: Draft {
+        get { drafts.first(where: { $0.id == activeID }) ?? drafts[0] }
+        set {
+            var updated = newValue
+            updated.savedAt = Date()
+            if let index = drafts.firstIndex(where: { $0.id == activeID }) {
+                drafts[index] = updated
+            } else {
+                drafts.append(updated)
+                activeID = updated.id
+            }
+            scheduleSave()
+        }
     }
 
     func save() {
-        draft.savedAt = Date()
-        DiskStore.save(draft, to: file)
+        saveTask?.cancel()
+        persist()
+    }
+
+    @discardableResult
+    func createDraft() -> UUID {
+        if isEmpty { return activeID }
+        let created = Self.emptyDraft()
+        drafts.append(created)
+        activeID = created.id
+        persist()
+        return created.id
+    }
+
+    func select(_ id: UUID) {
+        guard drafts.contains(where: { $0.id == id }) else { return }
+        activeID = id
+        persist()
+    }
+
+    func delete(_ id: UUID) {
+        guard let index = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts.remove(at: index)
+        if drafts.isEmpty {
+            let replacement = Self.emptyDraft()
+            drafts = [replacement]
+            activeID = replacement.id
+        } else if activeID == id {
+            activeID = drafts[min(index, drafts.count - 1)].id
+        }
+        persist()
+    }
+
+    func title(for draft: Draft) -> String {
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "未命名草稿" : title
+    }
+
+    private static func emptyDraft() -> Draft {
+        Draft(
+            id: UUID(),
+            nodeName: "create",
+            nodeTitle: "分享创造",
+            title: "",
+            body: "",
+            savedAt: Date()
+        )
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self?.persist()
+        }
+    }
+
+    private func persist() {
+        DiskStore.save(Container(drafts: drafts, activeID: activeID), to: file)
     }
 
     var savedAtText: String {
@@ -494,6 +707,57 @@ final class DraftStore: ObservableObject {
     var isEmpty: Bool {
         draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+// MARK: - Reply drafts
+
+@MainActor
+final class ReplyDraftStore: ObservableObject {
+    @Published private var values: [Int: String]
+
+    private let file = DiskStore.url(for: "reply-drafts.json")
+    private var saveTask: Task<Void, Never>?
+
+    init() {
+        values = DiskStore.load([Int: String].self, from: file) ?? [:]
+    }
+
+    func text(for topicID: Int) -> String {
+        values[topicID] ?? ""
+    }
+
+    func update(_ text: String, for topicID: Int) {
+        if text.isEmpty {
+            values.removeValue(forKey: topicID)
+        } else {
+            values[topicID] = text
+        }
+        scheduleSave()
+    }
+
+    func clear(topicID: Int) {
+        guard values.removeValue(forKey: topicID) != nil else { return }
+        saveTask?.cancel()
+        persist()
+    }
+
+    func save() {
+        saveTask?.cancel()
+        persist()
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self?.persist()
+        }
+    }
+
+    private func persist() {
+        DiskStore.save(values, to: file)
     }
 }
 
@@ -526,5 +790,30 @@ enum DiskStore {
     static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
+    }
+
+    static func byteSize(of directory: URL) -> Int {
+        let keys: [URLResourceKey] = [
+            .isRegularFileKey,
+            .fileSizeKey,
+            .fileAllocatedSizeKey,
+            .totalFileAllocatedSizeKey,
+        ]
+        guard let files = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+
+        var total = 0
+        for case let file as URL in files {
+            guard let values = try? file.resourceValues(forKeys: Set(keys)),
+                  values.isRegularFile == true else { continue }
+            total += values.totalFileAllocatedSize
+                ?? values.fileAllocatedSize
+                ?? values.fileSize
+                ?? 0
+        }
+        return total
     }
 }

@@ -15,6 +15,8 @@ struct V2EXApp: App {
     @StateObject private var recentSearches = RecentSearchStore()
     @StateObject private var blocks = BlockStore()
     @StateObject private var drafts = DraftStore()
+    @StateObject private var replyDrafts = ReplyDraftStore()
+    @StateObject private var history = HistoryStore()
 
     init() {
         #if DEBUG
@@ -48,6 +50,8 @@ struct V2EXApp: App {
                 .environmentObject(recentSearches)
                 .environmentObject(blocks)
                 .environmentObject(drafts)
+                .environmentObject(replyDrafts)
+                .environmentObject(history)
                 .preferredColorScheme(settings.theme.colorScheme)
                 .tint(Theme.accent)
         }

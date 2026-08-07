@@ -83,13 +83,6 @@ final class UpdateChecker: ObservableObject {
         guard !hasChecked else { return }
         hasChecked = true
 
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-showUpdateSheet") {
-            present(Self.previewRelease)
-            return
-        }
-        #endif
-
         guard await Self.isTestFlightBuild else { return }
 
         do {
@@ -145,20 +138,6 @@ final class UpdateChecker: ObservableObject {
             }
         }
     }
-
-    #if DEBUG
-    private static let previewRelease = GitHubRelease(
-        id: -1,
-        tagName: "v1.1.0",
-        body: """
-        ## 主要更新
-
-        - 优化首页与话题详情的浏览体验
-        - 提升图片预览的加载速度
-        - 修复已知问题并改善稳定性
-        """
-    )
-    #endif
 }
 
 struct TestFlightUpdateSheet: View {

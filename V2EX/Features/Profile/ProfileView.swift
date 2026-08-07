@@ -35,6 +35,7 @@ struct ProfileView: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var blocks: BlockStore
+    @EnvironmentObject private var history: HistoryStore
 
     var body: some View {
         ScrollView {
@@ -192,6 +193,24 @@ struct ProfileView: View {
                 SettingsRow(icon: "star.fill", iconColor: Theme.amber, title: "我的收藏") {
                     HStack(spacing: 6) {
                         Text("\(favorites.topics.count)")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Theme.muted)
+                        Chevron()
+                    }
+                }
+            }
+            .buttonStyle(.row)
+            RowSeparator(leadingInset: 58)
+
+            NavigationLink(value: Route.history) {
+                SettingsRow(
+                    icon: "clock.arrow.circlepath",
+                    iconColor: Theme.accent,
+                    title: "浏览历史",
+                    subtitle: "保留 \(HistoryStore.retentionDays) 天"
+                ) {
+                    HStack(spacing: 6) {
+                        Text("\(history.entries.count)")
                             .font(.system(size: 15))
                             .foregroundStyle(Theme.muted)
                         Chevron()

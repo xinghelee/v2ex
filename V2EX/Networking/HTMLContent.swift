@@ -196,7 +196,7 @@ enum HTMLText {
                 case "code":
                     piece.inlinePresentationIntent = .code
                 case "a":
-                    if let href = attributes["href"], let url = absoluteURL(href) {
+                    if let url = linkTarget(href: attributes["href"], label: piece) {
                         piece.link = url
                     }
                 case "br":
@@ -295,6 +295,27 @@ enum HTMLText {
         return String(fragment[value])
             .replacingOccurrences(of: "src=\"", with: "")
             .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+    }
+
+    /// An anchor's destination, falling back to its own label when the `href`
+    /// is unusable.
+    ///
+    /// The markdown `[https://example.com]()` — URL in the label slot, target
+    /// left empty — is a common enough slip that V2EX renders it verbatim as
+    /// `<a href="">https://example.com</a>`. That leaves a full URL sitting on
+    /// screen with nothing behind it. The fallback insists on an http(s) URL
+    /// with a host so an ordinary text label like "点这里" stays plain text
+    /// rather than becoming a link to nowhere.
+    static func linkTarget(href: String?, label: AttributedString) -> URL? {
+        if let href, let url = absoluteURL(href) { return url }
+
+        let text = String(label.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: text),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              url.host?.isEmpty == false
+        else { return nil }
+        return url
     }
 
     static func absoluteURL(_ raw: String) -> URL? {
