@@ -73,6 +73,8 @@ final class SearchViewModel: ObservableObject {
 struct SearchView: View {
     @StateObject private var model = SearchViewModel()
     @EnvironmentObject private var recents: RecentSearchStore
+    @EnvironmentObject private var moderation: ModerationStore
+    @State private var reportTarget: ModerationTarget?
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -99,6 +101,7 @@ struct SearchView: View {
             .onAppear {
                 DispatchQueue.main.async { searchFocused = true }
             }
+            .sheet(item: $reportTarget) { ReportSheet(target: $0) }
     }
 
     @ViewBuilder
@@ -128,20 +131,37 @@ struct SearchView: View {
         .scrollDismissesKeyboard(.immediately)
     }
 
+    /// 屏蔽与举报同样作用于搜索结果 —— 漏了这里，被屏蔽的人搜一下就又
+    /// 回来了。
+    private var visibleHits: [SearchHit] {
+        model.hits.filter { hit in
+            !moderation.hiddenTopicIDs.contains(hit.id)
+                && !moderation.isBlocked(username: hit.member)
+                && !moderation.matchesKeyword(hit.title + " " + hit.content)
+        }
+    }
+
     @ViewBuilder
     private var hitList: some View {
-        if model.hits.isEmpty {
+        let hits = visibleHits
+        if hits.isEmpty {
             if model.hasSearched {
                 EmptyStateCard(icon: "magnifyingglass", title: "没有匹配的内容")
             }
         } else {
             CardSection {
-                ForEach(Array(model.hits.enumerated()), id: \.element.id) { index, hit in
+                ForEach(Array(hits.enumerated()), id: \.element.id) { index, hit in
                     NavigationLink(value: Route.topic(hit.id)) {
                         hitRow(hit)
                     }
                     .buttonStyle(.row)
-                    if index < model.hits.count - 1 {
+                    .contextMenu {
+                        ModerationMenuItems(
+                            target: .topic(id: hit.id, author: hit.member, excerpt: hit.title),
+                            onReport: { reportTarget = $0 }
+                        )
+                    }
+                    if index < hits.count - 1 {
                         RowSeparator()
                     }
                 }

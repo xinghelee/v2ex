@@ -6,11 +6,14 @@ struct FavoritesView: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var session: V2EXSessionStore
+    @EnvironmentObject private var moderation: ModerationStore
+    @State private var reportTarget: ModerationTarget?
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                if favorites.topics.isEmpty {
+                let visible = moderation.filter(favorites.topics)
+                if visible.isEmpty {
                     EmptyStateCard(
                         icon: "star",
                         title: "还没有收藏",
@@ -18,7 +21,7 @@ struct FavoritesView: View {
                     )
                     .padding(.top, 8)
                 } else {
-                    TopicListCard(items: favorites.topics) { topic in
+                    TopicListCard(items: visible) { topic in
                         NavigationLink(value: Route.topic(topic.id)) {
                             TopicRow(topic: topic, isOffline: offline.isOffline(topic.id))
                         }
@@ -29,6 +32,14 @@ struct FavoritesView: View {
                             } label: {
                                 Label("取消收藏", systemImage: "star.slash")
                             }
+                            ModerationMenuItems(
+                                target: .topic(
+                                    id: topic.id,
+                                    author: topic.authorName,
+                                    excerpt: topic.title
+                                ),
+                                onReport: { reportTarget = $0 }
+                            )
                         }
                     }
                     .padding(.top, 8)
@@ -56,6 +67,7 @@ struct FavoritesView: View {
 struct HistoryView: View {
     @EnvironmentObject private var history: HistoryStore
     @EnvironmentObject private var offline: OfflineStore
+    @EnvironmentObject private var moderation: ModerationStore
     @State private var showClearConfirm = false
 
     private static let dayFormatter: DateFormatter = {
@@ -69,7 +81,7 @@ struct HistoryView: View {
     private var sections: [(title: String, entries: [HistoryStore.Entry])] {
         var order: [String] = []
         var grouped: [String: [HistoryStore.Entry]] = [:]
-        for entry in history.entries {
+        for entry in history.entries where !moderation.isHidden(entry.topic) {
             let title = Self.dayTitle(for: entry.viewedAt)
             if grouped[title] == nil { order.append(title) }
             grouped[title, default: []].append(entry)
@@ -151,6 +163,7 @@ struct HistoryView: View {
 
 struct OfflineListView: View {
     @EnvironmentObject private var offline: OfflineStore
+    @EnvironmentObject private var moderation: ModerationStore
     @State private var showClearConfirm = false
 
     var body: some View {
@@ -176,14 +189,15 @@ struct OfflineListView: View {
                     .frame(minHeight: 54)
                 }
 
-                if offline.bundles.isEmpty {
+                let visibleBundles = offline.bundles.filter { !moderation.isHidden($0.topic) }
+                if visibleBundles.isEmpty {
                     EmptyStateCard(
                         icon: "arrow.down.circle",
                         title: "还没有离线内容",
                         message: "在话题页的「…」里选择「保存以离线阅读」，整帖和回复都会存到本地。"
                     )
                 } else {
-                    TopicListCard(items: offline.bundles) { saved in
+                    TopicListCard(items: visibleBundles) { saved in
                         NavigationLink(value: Route.topic(saved.topic.id)) {
                             TopicRow(topic: saved.topic, isOffline: false)
                         }
@@ -263,106 +277,6 @@ struct MyPostsView: View {
     }
 }
 
-// MARK: - 屏蔽的关键词与用户
-
-struct BlockedView: View {
-    @EnvironmentObject private var blocks: BlockStore
-    @State private var newKeyword = ""
-    @State private var newUsername = ""
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                section(
-                    header: "关键词",
-                    placeholder: "添加要屏蔽的关键词",
-                    text: $newKeyword,
-                    items: blocks.keywords,
-                    onAdd: { blocks.addKeyword($0) },
-                    onRemove: { blocks.removeKeyword($0) }
-                )
-                section(
-                    header: "用户",
-                    placeholder: "添加要屏蔽的用户名",
-                    text: $newUsername,
-                    items: blocks.usernames,
-                    onAdd: { blocks.addUsername($0) },
-                    onRemove: { blocks.removeUsername($0) }
-                )
-
-                Text("屏蔽只在本机生效：命中的话题不会出现在首页、节点和收藏列表里。")
-                    .font(.system(size: 12))
-                    .lineSpacing(3)
-                    .foregroundStyle(Theme.muted)
-                    .padding(.horizontal, Theme.Metric.headerPadding)
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 40)
-        }
-        .scrollIndicators(.hidden)
-        .background(Theme.canvas)
-        .navigationTitle("屏蔽")
-        .navigationBarTitleDisplayMode(.large)
-    }
-
-    private func section(
-        header: String,
-        placeholder: String,
-        text: Binding<String>,
-        items: [String],
-        onAdd: @escaping (String) -> Void,
-        onRemove: @escaping (String) -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            GroupHeader(title: header)
-            CardSection {
-                HStack(spacing: 10) {
-                    TextField(placeholder, text: text)
-                        .font(.system(size: 16))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .onSubmit {
-                            onAdd(text.wrappedValue)
-                            text.wrappedValue = ""
-                        }
-                    Button {
-                        onAdd(text.wrappedValue)
-                        text.wrappedValue = ""
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(Theme.accent)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(text.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                .padding(.horizontal, 16)
-                .frame(minHeight: 54)
-
-                ForEach(items, id: \.self) { item in
-                    RowSeparator()
-                    HStack {
-                        Text(item)
-                            .font(.system(size: 16))
-                            .foregroundStyle(Theme.ink)
-                        Spacer()
-                        Button {
-                            withAnimation(.snappy) { onRemove(item) }
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 18))
-                                .foregroundStyle(Theme.unreadDot)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 48)
-                }
-            }
-        }
-    }
-}
-
 // MARK: - 用户主页
 
 struct MemberView: View {
@@ -371,11 +285,15 @@ struct MemberView: View {
     @State private var member: V2Member?
     @State private var topics: [V2Topic] = []
     @State private var isLoading = false
-    @EnvironmentObject private var blocks: BlockStore
+    @State private var reportTarget: ModerationTarget?
+    @EnvironmentObject private var moderation: ModerationStore
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
+                if moderation.isBlocked(username: username) {
+                    blockedBanner
+                }
                 if let member {
                     profileCard(member)
                 } else if isLoading {
@@ -384,14 +302,25 @@ struct MemberView: View {
                     EmptyStateCard(icon: "person", title: "没有找到这个用户")
                 }
 
-                if !topics.isEmpty {
+                let visible = moderation.filter(topics)
+                if !visible.isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
                         GroupHeader(title: "最近发布")
-                        TopicListCard(items: topics) { topic in
+                        TopicListCard(items: visible) { topic in
                             NavigationLink(value: Route.topic(topic.id)) {
                                 TopicRow(topic: topic)
                             }
                             .buttonStyle(.row)
+                            .contextMenu {
+                                ModerationMenuItems(
+                                    target: .topic(
+                                        id: topic.id,
+                                        author: topic.authorName,
+                                        excerpt: topic.title
+                                    ),
+                                    onReport: { reportTarget = $0 }
+                                )
+                            }
                         }
                     }
                 }
@@ -406,17 +335,50 @@ struct MemberView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button(role: .destructive) {
-                        blocks.addUsername(username)
-                    } label: {
-                        Label("屏蔽这个用户", systemImage: "nosign")
+                    ModerationMenuItems(
+                        target: .member(username: username),
+                        onReport: { reportTarget = $0 }
+                    )
+                    if moderation.isBlocked(username: username) {
+                        Button {
+                            moderation.unblock(username: username)
+                        } label: {
+                            Label("取消屏蔽", systemImage: "arrow.uturn.backward")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis").foregroundStyle(Theme.body)
                 }
+                .accessibilityLabel("举报或屏蔽这个用户")
             }
         }
+        .sheet(item: $reportTarget) { ReportSheet(target: $0) }
         .task { await load() }
+    }
+
+    /// 屏蔽后仍然进得来这个页面（从别处的链接），所以要说清楚为什么这里
+    /// 是空的，以及怎么反悔。
+    private var blockedBanner: some View {
+        CardSection(padding: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "nosign")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Theme.accent)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("你已屏蔽这个用户")
+                        .font(Type.title(15))
+                        .foregroundStyle(Theme.ink)
+                    Text("他的话题和回复不会出现在 App 的任何地方。")
+                        .font(Type.body(13))
+                        .foregroundStyle(Theme.muted)
+                    Button("取消屏蔽") { moderation.unblock(username: username) }
+                        .font(Type.meta(13))
+                        .foregroundStyle(Theme.accent)
+                        .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+            }
+        }
     }
 
     private func profileCard(_ member: V2Member) -> some View {

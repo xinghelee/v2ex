@@ -35,7 +35,7 @@
 | iOS 26 | 原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起 |
 | 渲染 | 自研轻量 HTML 解析（段落/行内/图片提取），替代 NSAttributedString 方案 |
 | 存储 | Keychain（Token）、UserDefaults（设置）、磁盘缓存（离线包） |
-| 调试 | DEBUG 构建集成 SandboxServer；Release 使用 no-op 实现 |
+| 内容治理 | 首启条款闸门、举报与屏蔽，命中内容即时且持久地从全部列表移除 |
 
 一些工程决策：
 

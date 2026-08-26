@@ -92,10 +92,10 @@ struct NodeDetailView: View {
     @EnvironmentObject private var readState: ReadStateStore
     @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var settings: AppSettings
-    @EnvironmentObject private var blocks: BlockStore
+    @EnvironmentObject private var moderation: ModerationStore
     @Environment(\.openURL) private var openURL
 
-    private var visibleTopics: [V2Topic] { blocks.filter(model.sorted) }
+    private var visibleTopics: [V2Topic] { moderation.filter(model.sorted) }
 
     var body: some View {
         ScrollView {

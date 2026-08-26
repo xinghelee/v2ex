@@ -104,7 +104,7 @@ struct HomeView: View {
 
     @StateObject private var model = HomeViewModel()
     @EnvironmentObject private var followed: FollowedNodesStore
-    @EnvironmentObject private var blocks: BlockStore
+    @EnvironmentObject private var moderation: ModerationStore
     @EnvironmentObject private var readState: ReadStateStore
     @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var settings: AppSettings
@@ -126,7 +126,7 @@ struct HomeView: View {
     }
 
     private var visibleTopics: [V2Topic] {
-        blocks.filter(model.topics).filter { !HomeViewModel.isPromotion($0) }
+        moderation.filter(model.topics).filter { !HomeViewModel.isPromotion($0) }
     }
 
     var body: some View {

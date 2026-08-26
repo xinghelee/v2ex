@@ -24,12 +24,6 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_sandboxserver._tcp</string>
-	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>V2EX 需要访问本地网络，以便 DEBUG 调试台（SandboxServer）在同一局域网内查看 App 数据。</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

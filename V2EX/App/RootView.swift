@@ -42,6 +42,7 @@ enum Route: Hashable {
     case offline
     case myPosts
     case blocked
+    case terms
     case settings
     case appearance
     case reading
@@ -74,6 +75,8 @@ struct RootView: View {
     @EnvironmentObject private var followed: FollowedNodesStore
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var offline: OfflineStore
+    @EnvironmentObject private var moderation: ModerationStore
+    @EnvironmentObject private var agreement: AgreementStore
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var notifications = NotificationsViewModel()
 
@@ -116,8 +119,13 @@ struct RootView: View {
             TestFlightUpdateSheet(release: release)
         }
         .environmentObject(notifications)
+        // UGC 闸门：条款没同意之前，一条用户内容都不给看。
+        .fullScreenCover(isPresented: .constant(!agreement.hasAccepted)) {
+            AgreementGateView { agreement.accept() }
+        }
         .task {
             await updateChecker.checkForUpdate()
+            await moderation.flush()
         }
         .task(id: token.token) {
             await notifications.refresh(token: token.token)
@@ -133,6 +141,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task { await syncAutomaticOffline() }
+            Task { await moderation.flush() }
         }
         .background {
             KeyboardDismissTapCapture()
@@ -242,7 +251,8 @@ struct RootView: View {
         case .hackerNews(let id): HNDetailView(itemID: id)
         case .offline: OfflineListView()
         case .myPosts: MyPostsView()
-        case .blocked: BlockedView()
+        case .blocked: ModerationSettingsView()
+        case .terms: TermsView()
         case .settings: SettingsView()
         case .appearance: AppearanceSettingsView()
         case .reading: ReadingSettingsView()

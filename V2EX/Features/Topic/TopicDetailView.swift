@@ -13,6 +13,7 @@ struct TopicDetailView: View {
     @EnvironmentObject private var session: V2EXSessionStore
     @EnvironmentObject private var replyDrafts: ReplyDraftStore
     @EnvironmentObject private var history: HistoryStore
+    @EnvironmentObject private var moderation: ModerationStore
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
 
@@ -22,6 +23,7 @@ struct TopicDetailView: View {
     @State private var isSyncingFavorite = false
     @State private var isComposerHidden = false
     @State private var showShareCard = false
+    @State private var reportTarget: ModerationTarget?
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -31,7 +33,9 @@ struct TopicDetailView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
-                        if let topic = model.topic {
+                        if moderation.hiddenTopicIDs.contains(topicID) {
+                            hiddenTopicCard
+                        } else if let topic = model.topic {
                             topicCard(topic)
                             replyHeader(topic)
                             replyList
@@ -98,6 +102,7 @@ struct TopicDetailView: View {
                 TopicShareCardSheet(topic: topic)
             }
         }
+        .sheet(item: $reportTarget) { ReportSheet(target: $0) }
         .onDisappear { replyDrafts.save() }
     }
 
@@ -264,10 +269,20 @@ struct TopicDetailView: View {
                         } label: {
                             Label("在 V2EX 打开", systemImage: "safari")
                         }
+                        Divider()
+                        ModerationMenuItems(
+                            target: .topic(
+                                id: topic.id,
+                                author: topic.authorName,
+                                excerpt: topic.title + "\n" + (topic.content ?? "")
+                            ),
+                            onReport: { reportTarget = $0 }
+                        )
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle").foregroundStyle(Theme.body)
                 }
+                .accessibilityLabel("更多操作")
             }
         }
     }
@@ -399,9 +414,23 @@ struct TopicDetailView: View {
         .padding(.top, 2)
     }
 
+    /// 举报过的话题不再画正文和回复 —— 举报的语义是「我不想再看到它」，
+    /// 从链接、历史或收藏再点进来也一样。
+    private var hiddenTopicCard: some View {
+        EmptyStateCard(
+            icon: "flag",
+            title: "你已举报这个话题",
+            message: "它已经从你的 App 里移除。开发者会在 24 小时内核实并向 V2EX 站方上报。",
+            actionTitle: "恢复显示"
+        ) {
+            moderation.unhideTopic(topicID)
+        }
+        .padding(.top, 8)
+    }
+
     @ViewBuilder
     private var replyList: some View {
-        let items = model.visibleReplies
+        let items = moderation.visible(model.visibleReplies)
         if items.isEmpty {
             if model.isLoading {
                 LoadingCard()
@@ -437,6 +466,14 @@ struct TopicDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
+            } else if !model.visibleReplies.isEmpty {
+                // 有回复，但全被屏蔽或举报滤掉了。说清楚是被过滤而不是没人回，
+                // 否则用户会以为 App 没加载出来。
+                EmptyStateCard(
+                    icon: "nosign",
+                    title: "回复已被隐藏",
+                    message: "这个帖子里的回复都来自你屏蔽或举报过的内容。可以在「我的 → 内容与屏蔽」里调整。"
+                )
             } else {
                 EmptyStateCard(icon: "bubble.left", title: "还没有回复")
             }
@@ -445,12 +482,14 @@ struct TopicDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ReplyRow(
                         item: item,
+                        topicID: topicID,
                         isPro: model.proMembers.contains(item.reply.authorName),
                         onReply: { mention in
                             setComposerHidden(false)
                             replyDrafts.update(mention, for: topicID)
                             composerFocused = true
-                        }
+                        },
+                        onReport: { reportTarget = $0 }
                     )
                         .id(item.id)
                         .onAppear {
@@ -474,6 +513,15 @@ struct TopicDetailView: View {
                 )
                 .padding(.horizontal, Theme.Metric.screenPadding)
                 .padding(.top, index == 0 ? 0 : -10)
+            }
+
+            let hidden = model.visibleReplies.count - items.count
+            if hidden > 0 {
+                Text("\(hidden) 条回复已因屏蔽或举报隐藏")
+                    .font(Type.meta(12))
+                    .foregroundStyle(Theme.faint)
+                    .padding(.horizontal, Theme.Metric.headerPadding)
+                    .padding(.top, 8)
             }
         }
     }
@@ -612,8 +660,12 @@ struct TopicDetailView: View {
 
 struct ReplyRow: View {
     let item: ThreadedReply
+    /// 举报回复要连帖子 ID 一起报，好让开发者拼出 v2ex.com 上的定位链接。
+    /// `V2Reply.topicId` 在网页抓取和离线快照里可能缺，所以由父视图给。
+    var topicID: Int = 0
     var isPro = false
     var onReply: ((String) -> Void)? = nil
+    var onReport: ((ModerationTarget) -> Void)? = nil
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
@@ -661,6 +713,23 @@ struct ReplyRow: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    // 举报入口给一个看得见的按钮，不藏在长按里 —— 长按是
+                    // 发现不了的手势，而这是每条 UGC 都必须够得着的动作。
+                    if let onReport {
+                        Menu {
+                            ModerationMenuItems(target: moderationTarget, onReport: onReport)
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.muted)
+                                .frame(width: 30, height: 32)
+                                .contentShape(Rectangle())
+                        }
+                        .menuStyle(.borderlessButton)
+                        // 不加这个，Menu 的 label 是纯图标，辅助功能树里读不出
+                        // 任何名字 —— 举报入口对 VoiceOver 用户等于不存在。
+                        .accessibilityLabel("举报或屏蔽 \(item.reply.authorName) 的这条回复")
+                    }
                 }
 
                 if let quoted = item.quoted {
@@ -684,6 +753,20 @@ struct ReplyRow: View {
         // Must come after the padding: widening first and padding second makes
         // the row 32pt wider than the card, which clips the last glyph.
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contextMenu {
+            if let onReport {
+                ModerationMenuItems(target: moderationTarget, onReport: onReport)
+            }
+        }
+    }
+
+    private var moderationTarget: ModerationTarget {
+        .reply(
+            id: item.reply.id,
+            topicID: item.reply.topicId ?? topicID,
+            author: item.reply.authorName,
+            excerpt: item.reply.content
+        )
     }
 
     /// The design's fold-quote: accent rule, author + floor, one-line excerpt.

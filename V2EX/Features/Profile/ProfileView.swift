@@ -34,7 +34,7 @@ struct ProfileView: View {
     @EnvironmentObject private var token: TokenStore
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var offline: OfflineStore
-    @EnvironmentObject private var blocks: BlockStore
+    @EnvironmentObject private var moderation: ModerationStore
     @EnvironmentObject private var history: HistoryStore
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var followed: FollowedNodesStore
@@ -196,8 +196,8 @@ struct ProfileView: View {
             collectionRow(icon: "square.text.square", count: model.recentTopics.count,
                           title: "我的话题", route: .myPosts)
             RowSeparator(leadingInset: 52)
-            collectionRow(icon: "nosign", count: blocks.count,
-                          title: "屏蔽的关键词与用户", route: .blocked)
+            collectionRow(icon: "nosign", count: moderation.count,
+                          title: "内容与屏蔽", route: .blocked)
         }
         .background(Theme.card)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))

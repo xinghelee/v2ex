@@ -145,6 +145,65 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     GroupHeader(title: "关于")
                     CardSection {
+                        // Apple 1.2 / 5.1.1(i)：条款、隐私政策和支持联系方式
+                        // 都必须在 App 内够得着，不能只留在商店页面上。
+                        NavigationLink(value: Route.terms) {
+                            SettingsRow(
+                                icon: "checkmark.shield",
+                                iconColor: Theme.accent,
+                                title: "使用条款与社区规范",
+                                subtitle: "零容忍政策、举报与屏蔽说明"
+                            ) {
+                                Chevron()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        RowSeparator(leadingInset: 54)
+
+                        Button {
+                            openURL(ReportService.privacyPolicyURL)
+                        } label: {
+                            SettingsRow(
+                                icon: "lock.shield",
+                                iconColor: Theme.accent,
+                                title: "隐私政策",
+                                subtitle: "本 App 不收集任何个人数据"
+                            ) {
+                                Chevron()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        RowSeparator(leadingInset: 54)
+
+                        NavigationLink(value: Route.blocked) {
+                            SettingsRow(
+                                icon: "nosign",
+                                iconColor: Theme.accent,
+                                title: "内容与屏蔽",
+                                subtitle: "屏蔽名单、已隐藏的内容与举报记录"
+                            ) {
+                                Chevron()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        RowSeparator(leadingInset: 54)
+
+                        Button {
+                            guard let url = URL(string: "mailto:\(ReportService.supportEmail)") else { return }
+                            openURL(url)
+                        } label: {
+                            SettingsRow(
+                                icon: "envelope",
+                                iconColor: Theme.accent,
+                                title: "联系开发者",
+                                subtitle: ReportService.supportEmail
+                            ) {
+                                Chevron()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        RowSeparator(leadingInset: 54)
+
                         Button {
                             openURL(URL(string: "https://www.v2ex.com/help/api")!)
                         } label: {

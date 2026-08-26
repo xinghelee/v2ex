@@ -508,60 +508,6 @@ final class RecentSearchStore: ObservableObject {
     }
 }
 
-// MARK: - Block list
-
-/// 屏蔽的关键词与用户 — applied to every topic list before it reaches a view.
-@MainActor
-final class BlockStore: ObservableObject {
-    @Published private(set) var keywords: [String] = []
-    @Published private(set) var usernames: [String] = []
-
-    private let keywordKey = "blockedKeywords"
-    private let userKey = "blockedUsernames"
-
-    init() {
-        keywords = UserDefaults.standard.stringArray(forKey: keywordKey) ?? []
-        usernames = UserDefaults.standard.stringArray(forKey: userKey) ?? []
-    }
-
-    var count: Int { keywords.count + usernames.count }
-
-    func addKeyword(_ value: String) {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !keywords.contains(trimmed) else { return }
-        keywords.append(trimmed)
-        UserDefaults.standard.set(keywords, forKey: keywordKey)
-    }
-
-    func addUsername(_ value: String) {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !usernames.contains(trimmed) else { return }
-        usernames.append(trimmed)
-        UserDefaults.standard.set(usernames, forKey: userKey)
-    }
-
-    func removeKeyword(_ value: String) {
-        keywords.removeAll { $0 == value }
-        UserDefaults.standard.set(keywords, forKey: keywordKey)
-    }
-
-    func removeUsername(_ value: String) {
-        usernames.removeAll { $0 == value }
-        UserDefaults.standard.set(usernames, forKey: userKey)
-    }
-
-    func filter(_ topics: [V2Topic]) -> [V2Topic] {
-        guard count > 0 else { return topics }
-        return topics.filter { topic in
-            if usernames.contains(where: { $0.caseInsensitiveCompare(topic.authorName) == .orderedSame }) {
-                return false
-            }
-            let haystack = topic.title + " " + (topic.content ?? "")
-            return !keywords.contains { haystack.localizedCaseInsensitiveContains($0) }
-        }
-    }
-}
-
 // MARK: - Compose draft
 
 @MainActor

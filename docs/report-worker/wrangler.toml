@@ -1,0 +1,29 @@
+name = "v2ex-reports"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+# 自定义域，不用默认的 *.workers.dev。
+#
+# workers.dev 在中国大陆长期不可达，而 V2EX 用户主体在大陆 —— 用默认域的话
+# 大陆用户的举报永远发不出去，只能卡在本机 outbox 里，条款里那句「24 小时内
+# 核实」对最大的一批用户就成了空话。xinghelee.com 已经托管在 Cloudflare，
+# 绑一个子域即可；免费版大陆流量绕境外节点，慢但通。
+[[routes]]
+pattern = "reports.xinghelee.com"
+custom_domain = true
+
+# wrangler kv namespace create REPORTS 之后把返回的 id 填到这里。
+[[kv_namespaces]]
+binding = "REPORTS"
+id = "6e6eb905fdf6479c8ade075dcba253f2"
+
+# 按 IP 限流：每分钟 10 次。正常用户一分钟举报不了 10 条，机器人一秒就超。
+# 这是 POST 端点唯一挡得住自动化刷量的手段 —— 客户端密钥对 App 无效，
+# 因为任何密钥都能从二进制里掏出来。
+[[ratelimits]]
+name = "REPORT_RL"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+# ADMIN_KEY 不放这里 —— wrangler.toml 是要提交进仓库的，明文密钥进版本库
+# 等于没有密钥。用 `wrangler secret put ADMIN_KEY` 存到 Cloudflare 侧。
