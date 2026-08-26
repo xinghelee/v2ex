@@ -27,3 +27,6 @@ __pycache__/
 *.certSigningRequest
 *.mobileprovision
 .env
+
+# asc CLI 的本地 review 计划产物
+.asc/
