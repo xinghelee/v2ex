@@ -5,6 +5,7 @@
 ## 下载
 
 - **TestFlight 公测**：[testflight.apple.com/join/jUBsFk9u](https://testflight.apple.com/join/jUBsFk9u)
+- **Android 版**：[xinghelee/v2ex-android](https://github.com/xinghelee/v2ex-android)，APK 见其 [Releases](https://github.com/xinghelee/v2ex-android/releases/latest)（Android 8.0+）
 
 ## 截图
 

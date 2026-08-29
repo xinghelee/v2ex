@@ -174,6 +174,18 @@
       transform: translateY(-1px);
     }
 
+    .install-button.secondary {
+      border-color: var(--line);
+      background: var(--paper);
+      color: var(--accent-strong);
+      box-shadow: none;
+    }
+
+    .install-button.secondary:hover {
+      border-color: var(--accent-strong);
+      background: rgba(8, 122, 91, 0.06);
+    }
+
     .install-button:focus-visible,
     .github-link:focus-visible,
     .brand:focus-visible {
@@ -349,7 +361,8 @@
         <p class="summary">在 iPhone 上浏览社区、关注节点、查看通知与保存内容。使用原生 Liquid Glass 交互，保持快速、清晰和专注。</p>
         <div class="actions">
           <a class="install-button" href="https://testflight.apple.com/join/jUBsFk9u">通过 TestFlight 安装 <span aria-hidden="true">→</span></a>
-          <span class="requirement">需要 iOS 26 或更高版本</span>
+          <a class="install-button secondary" href="https://github.com/xinghelee/v2ex-android/releases/latest">下载 Android 版 APK <span aria-hidden="true">↓</span></a>
+          <span class="requirement">iOS 26+ ・ Android 8.0+</span>
         </div>
       </div>
     </section>
