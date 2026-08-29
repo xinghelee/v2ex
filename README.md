@@ -2,6 +2,11 @@
 
 面向个人使用的 V2EX iOS 客户端。使用 SwiftUI 构建，采用 iOS 26 原生 Liquid Glass 组件，数据来自 V2EX API、网页会话和 sov2ex 搜索。
 
+## 下载
+
+- **TestFlight 公测**：[testflight.apple.com/join/jUBsFk9u](https://testflight.apple.com/join/jUBsFk9u)
+- **IPA 自签安装**：从 [Releases](https://github.com/xinghelee/v2ex/releases) 下载未签名 IPA，用 AltStore / Sideloadly 等工具签名安装
+
 ## 截图
 
 <p align="center">
