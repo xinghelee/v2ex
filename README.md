@@ -5,7 +5,6 @@
 ## 下载
 
 - **TestFlight 公测**：[testflight.apple.com/join/jUBsFk9u](https://testflight.apple.com/join/jUBsFk9u)
-- **IPA 自签安装**：从 [Releases](https://github.com/xinghelee/v2ex/releases) 下载未签名 IPA，用 AltStore / Sideloadly 等工具签名安装
 
 ## 截图
 
