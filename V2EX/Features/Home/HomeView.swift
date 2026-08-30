@@ -118,6 +118,9 @@ struct HomeView: View {
     @State private var scrollPositions: [HomeViewModel.Feed: ScrollPosition] = [:]
     /// 正在被长按拖起的分类 chip（用于关注节点排序）。
     @State private var draggedFeed: HomeViewModel.Feed?
+    /// `.task` 会在从话题详情返回时重新启动。记录已经消费过的打开请求，
+    /// 避免把用户当前分类重复重置为请求最初携带的「全部」。
+    @State private var handledRequestID: UUID?
 
     private var feeds: [HomeViewModel.Feed] {
         [.all, .hot, .following] + followed.names.prefix(8).map {
@@ -152,6 +155,20 @@ struct HomeView: View {
         .toolbar { toolbarContent }
         .topSafeAreaBar(spacing: 0) { feedFilterBar }
         .task(id: request.id) {
+            // NavigationStack cancels this task while a topic is on top and
+            // starts it again after Back. The same request must be consumed
+            // only once; otherwise its default `.all` feed overwrites the
+            // category the user selected before opening the topic.
+            guard handledRequestID != request.id else {
+                // A cancelled first load may leave a genuinely empty page.
+                // Refresh that same page without changing the selection.
+                if model.feed != .hackerNews, model.topics.isEmpty, !model.isLoading {
+                    await model.load(feed: model.feed, followedNodes: followed.names)
+                }
+                return
+            }
+            handledRequestID = request.id
+
             if model.feed == request.feed {
                 await model.load(feed: request.feed, followedNodes: followed.names)
             } else {
