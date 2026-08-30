@@ -164,7 +164,7 @@ struct TestFlightUpdateSheet: View {
                             .font(.system(size: 24, weight: .bold))
                             .foregroundStyle(Theme.ink)
                             .multilineTextAlignment(.center)
-                        Text("V2EX \(release.displayVersion) 已可通过 TestFlight 安装")
+                        Text("v2Explore \(release.displayVersion) 已可通过 TestFlight 安装")
                             .font(.system(size: 15))
                             .foregroundStyle(Theme.muted)
                             .multilineTextAlignment(.center)

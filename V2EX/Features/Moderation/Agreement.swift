@@ -18,7 +18,7 @@ enum Agreement {
     }
 
     static let intro = """
-    V2EX Way to explore 是 v2ex.com 的第三方阅读客户端，由独立开发者开发，与 V2EX 官方无从属关系。\
+    v2Explore · Way to Explore 是 v2ex.com 的第三方阅读客户端，由独立开发者开发，与 V2EX 官方无从属关系。\
     App 内显示的话题与回复均由 V2EX 用户发布，不代表本 App 的立场。
     """
 

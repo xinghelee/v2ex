@@ -1,4 +1,6 @@
-# V2EX
+# v2Explore
+
+> Way to Explore
 
 面向个人使用的 V2EX iOS 客户端。使用 SwiftUI 构建，采用 iOS 26 原生 Liquid Glass 组件，数据来自 V2EX API、网页会话和 sov2ex 搜索。
 
