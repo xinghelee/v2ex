@@ -114,9 +114,15 @@ struct GroupHeader: View {
                 .foregroundStyle(Theme.body)
             Spacer()
             if let trailing {
-                Button(trailing) { trailingAction?() }
-                    .font(Type.meta(13))
-                    .foregroundStyle(Theme.accent)
+                if let trailingAction {
+                    Button(trailing, action: trailingAction)
+                        .font(Type.meta(13))
+                        .foregroundStyle(Theme.accent)
+                } else {
+                    Text(trailing)
+                        .font(Type.number(12, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                }
             }
         }
         .padding(.horizontal, Theme.Metric.headerPadding)
@@ -290,10 +296,14 @@ struct IdentitySquare: View {
 /// Subtle press feedback for rows wrapped in a NavigationLink — `.plain`
 /// alone gives none, which is most of why a hand-built list feels inert.
 struct PressableRowStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(configuration.isPressed ? Theme.rowHighlight : Color.clear)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.995 : 1)
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -311,31 +321,49 @@ struct FilterChip: View {
     let isSelected: Bool
     var action: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Button(action: action) {
-            Group {
-                if isSelected {
-                    Text(title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(Theme.accent))
-                } else {
-                    Text(title)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Theme.muted)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .glassPill()
-                        .overlay {
-                            Capsule().strokeBorder(.white.opacity(0.35), lineWidth: 0.5)
-                        }
+            Text(title)
+                .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? Color.white : Theme.muted)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background {
+                    if isSelected {
+                        Capsule().fill(Theme.accent)
+                    } else {
+                        Capsule()
+                            .fill(Color.clear)
+                            .glassPill()
+                    }
                 }
-            }
-            .animation(.snappy(duration: 0.2), value: isSelected)
+                .overlay {
+                    Capsule().strokeBorder(
+                        isSelected ? Theme.accentDeep.opacity(0.35) : .white.opacity(0.35),
+                        lineWidth: 0.5
+                    )
+                }
+                .contentShape(Capsule())
+                // The visible capsule stays compact, while the actual target
+                // meets Apple's 44pt minimum.
+                .frame(minHeight: 44)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: isSelected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ChipPressStyle())
+        .accessibilityValue(isSelected ? "已选择" : "未选择")
+    }
+}
+
+private struct ChipPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
@@ -346,6 +374,8 @@ struct ChipRail<Item: Hashable, Label: View, Trailing: View>: View {
     var selected: Item? = nil
     @ViewBuilder var label: (Item) -> Label
     @ViewBuilder var trailing: Trailing
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -359,13 +389,19 @@ struct ChipRail<Item: Hashable, Label: View, Trailing: View>: View {
                     trailing
                 }
                 .padding(.horizontal, Theme.Metric.screenPadding)
-                .padding(.vertical, 8)
+                // Chips already carry a 44pt hit target; extra vertical padding
+                // made every rail feel like a second navigation bar.
+                .padding(.vertical, 2)
             }
             .scrollClipDisabled()
             .onChange(of: selected) { _, newValue in
                 guard let newValue else { return }
-                withAnimation(.snappy(duration: 0.3)) {
+                if reduceMotion {
                     proxy.scrollTo(newValue, anchor: .center)
+                } else {
+                    withAnimation(.snappy(duration: 0.3)) {
+                        proxy.scrollTo(newValue, anchor: .center)
+                    }
                 }
             }
         }
@@ -447,12 +483,16 @@ extension SettingsRow where Trailing == EmptyView {
 
 struct LoadingCard: View {
     var body: some View {
-        CardSection(padding: 28) {
-            HStack {
+        CardSection(padding: 24) {
+            HStack(spacing: 10) {
                 Spacer()
                 ProgressView().tint(Theme.accent)
+                Text("正在加载…")
+                    .font(Type.meta(13))
+                    .foregroundStyle(Theme.muted)
                 Spacer()
             }
+            .accessibilityElement(children: .combine)
         }
     }
 }

@@ -96,6 +96,10 @@ final class AppSettings: ObservableObject {
     @AppStorage("offlineOnWiFiOnly") var offlineOnWiFiOnly = true
     @AppStorage("dimReadTopics") var dimReadTopics = false
 
+    /// 首页「全部」分类顶部的节点活跃分布。默认开启，让产品差异
+    /// 在首次使用时可见；不喜欢仪表盘的用户可以恢复纯列表。
+    @AppStorage("communityPulseEnabled") var communityPulseEnabled = true
+
     /// 实验性：首页分类条末尾加一个 Hacker News 页。
     /// 默认关闭 —— 这是个 V2EX 客户端，第二个数据源应该是用户主动要的。
     @AppStorage("hackerNewsEnabled") var hackerNewsEnabled = false

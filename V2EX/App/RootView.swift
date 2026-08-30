@@ -45,6 +45,7 @@ enum AppTab: Int, CaseIterable, Identifiable {
 enum Route: Hashable {
     case topic(Int)
     case node(String)
+    case nodeCategory(String)
     case member(String)
     case favorites
     case history
@@ -52,6 +53,7 @@ enum Route: Hashable {
     case hackerNews(Int)
     case offline
     case myPosts
+    case radar
     case blocked
     case terms
     case settings
@@ -321,6 +323,12 @@ struct RootView: View {
         switch route {
         case .topic(let id): TopicDetailView(topicID: id)
         case .node(let name): NodeDetailView(nodeName: name)
+        case .nodeCategory(let id):
+            if let category = NodeCatalog.categories.first(where: { $0.id == id }) {
+                NodeCategoryView(category: category)
+            } else {
+                NodesView()
+            }
         case .member(let name): MemberView(username: name)
         case .favorites: FavoritesView()
         case .history: HistoryView()
@@ -328,6 +336,7 @@ struct RootView: View {
         case .hackerNews(let id): HNDetailView(itemID: id)
         case .offline: OfflineListView()
         case .myPosts: MyPostsView()
+        case .radar: RadarView()
         case .blocked: ModerationSettingsView()
         case .terms: TermsView()
         case .settings: SettingsView()

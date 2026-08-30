@@ -45,10 +45,14 @@ struct ReplyCount: View {
     let value: Int
     var size: CGFloat = 15
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Text("\(value)")
             .font(Type.number(size))
             .foregroundStyle(value == 0 ? Theme.faint : Theme.muted)
+            .contentTransition(reduceMotion ? .identity : .numericText(value: Double(value)))
+            .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: value)
             .frame(minWidth: 30, alignment: .trailing)
     }
 }

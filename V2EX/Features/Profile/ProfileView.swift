@@ -34,38 +34,36 @@ struct ProfileView: View {
     @EnvironmentObject private var token: TokenStore
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var offline: OfflineStore
+    @EnvironmentObject private var radar: RadarStore
     @EnvironmentObject private var moderation: ModerationStore
     @EnvironmentObject private var history: HistoryStore
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var followed: FollowedNodesStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var metricColumns: [GridItem] {
+        let count = horizontalSizeClass == .regular ? 4 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
+    }
+
+    private var libraryCount: Int {
+        favorites.topics.count + history.entries.count + offline.bundles.count + model.recentTopics.count
+    }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
-                if token.hasToken, let member = model.member {
-                    profileCard(member)
-                } else if token.hasToken, model.isLoading {
-                    LoadingCard()
-                } else if token.hasToken, model.loadFailed {
-                    EmptyStateCard(
-                        icon: "wifi.exclamationmark",
-                        title: "没能加载个人资料",
-                        message: "网络或接口暂时不可用，你的登录状态没有变，下拉或点重试即可。",
-                        actionTitle: "重试"
-                    ) {
-                        Task { await model.load(token: token.token) }
-                    }
-                } else {
-                    signedOutCard
-                }
-                collectionsGrid
+            LazyVStack(alignment: .leading, spacing: 16) {
+                accountSection
+                librarySection
+                utilitySection
+
                 if !model.recentTopics.isEmpty {
                     recentSection
                 }
             }
             .readableColumn()
             .padding(.top, 10)
-            .padding(.bottom, 12)
+            .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
         .softBottomEdgeEffect()
@@ -84,172 +82,268 @@ struct ProfileView: View {
         .task(id: token.token) { await model.load(token: token.token) }
     }
 
+    // MARK: - Account
+
+    @ViewBuilder
+    private var accountSection: some View {
+        if token.hasToken, let member = model.member {
+            profileCard(member)
+        } else if token.hasToken, model.isLoading {
+            LoadingCard()
+        } else if token.hasToken, model.loadFailed {
+            EmptyStateCard(
+                icon: "wifi.exclamationmark",
+                title: "没能加载个人资料",
+                message: "网络或接口暂时不可用，你的登录状态没有改变。",
+                actionTitle: "重试"
+            ) {
+                Task { await model.load(token: token.token) }
+            }
+        } else if token.hasToken {
+            // Avoid flashing the signed-out CTA for one frame before the task
+            // flips isLoading on a connected account.
+            LoadingCard()
+        } else {
+            signedOutCard
+        }
+    }
+
     private func profileCard(_ member: V2Member) -> some View {
         CardSection(padding: 18) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 15) {
                 HStack(spacing: 14) {
-                    ZStack {
-                        LinearGradient(
-                            colors: [Theme.accent, Theme.accentDeep],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                        Text(String(member.username.prefix(2)).lowercased())
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(.white)
-                        if let url = member.avatarURL {
-                            CachedRemoteImage(url: url)
-                        }
-                    }
-                    .frame(width: 60, height: 60)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    IdentitySquare(text: member.username, size: 64, imageURL: member.avatarURL)
+                        .accessibilityHidden(true)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(member.username)
-                            .font(.system(size: 20, weight: .bold))
-                            .kerning(-0.5)
-                            .foregroundStyle(Theme.ink)
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 7) {
+                            Text(member.username)
+                                .font(.system(size: 21, weight: .bold))
+                                .kerning(-0.5)
+                                .foregroundStyle(Theme.ink)
+                            Label("已连接", systemImage: "checkmark.circle.fill")
+                                .font(Type.label(10))
+                                .foregroundStyle(Theme.accent)
+                                .labelStyle(.titleAndIcon)
+                        }
                         Text(membershipLine(member))
-                            .font(.system(size: 13))
+                            .font(Type.meta(13))
                             .foregroundStyle(Theme.muted)
                     }
                     Spacer(minLength: 0)
                 }
+                .accessibilityElement(children: .combine)
 
-                if let bio = member.bio ?? member.tagline, !bio.isEmpty {
+                if let bio = profileBio(member) {
+                    Rectangle()
+                        .fill(Theme.separator)
+                        .frame(height: Theme.Metric.hairline)
                     Text(bio)
-                        .font(.system(size: 15))
+                        .font(Type.body(15))
                         .lineSpacing(3)
                         .foregroundStyle(Theme.body)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-
             }
         }
     }
 
     private func membershipLine(_ member: V2Member) -> String {
         var parts: [String] = []
-        if let id = member.id { parts.append("V2EX 第 \(id.formatted()) 号会员") }
+        if let id = member.id { parts.append("第 \(id.formatted()) 号会员") }
         if let days = member.joinedDays { parts.append("加入 \(days.formatted()) 天") }
         return parts.isEmpty ? "V2EX 会员" : parts.joined(separator: " · ")
+    }
+
+    private func profileBio(_ member: V2Member) -> String? {
+        [member.bio, member.tagline]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
     }
 
     private var signedOutCard: some View {
         NavigationLink(value: Route.tokenSetup) {
             CardSection(padding: 18) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        LinearGradient(
-                            colors: [Theme.accent, Theme.accentDeep],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(.white)
-                    }
-                    .frame(width: 60, height: 60)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                VStack(alignment: .leading, spacing: 15) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(Theme.accentSoft)
+                            Image(systemName: "person.crop.circle.badge.plus")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundStyle(Theme.accent)
+                        }
+                        .frame(width: 64, height: 64)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("未连接账号")
-                            .font(.system(size: 20, weight: .bold))
-                            .kerning(-0.5)
-                            .foregroundStyle(Theme.ink)
-                        Text("填入 Access Token 后可看通知和个人资料")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("访客模式")
+                                .font(.system(size: 21, weight: .bold))
+                                .kerning(-0.5)
+                                .foregroundStyle(Theme.ink)
+                            Text("浏览不受影响；连接账号后可查看通知与个人内容。")
+                                .font(Type.meta(13))
+                                .lineSpacing(2)
+                                .foregroundStyle(Theme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                    Spacer(minLength: 0)
-                    Chevron()
+
+                    HStack(spacing: 7) {
+                        Text("连接 V2EX 账号")
+                            .font(.system(size: 14, weight: .semibold))
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(Theme.accentSoft, in: Capsule())
                 }
             }
         }
         .buttonStyle(.row)
+        .accessibilityLabel("访客模式，连接 V2EX 账号")
+        .accessibilityHint("填写 Access Token")
     }
 
-    /// 四个「有内容」的入口做成 2×2 数据网格。
-    ///
-    /// 之前它们和「屏蔽」并列成五行等宽菜单，读起来就是一张系统设置表：
-    /// 每行权重相同，真正有信息量的数字被挤到行尾当配角。这里把数字提到
-    /// 主位，并换上设计系统里那套等宽圆体数字 —— 全 App 的计数都用它，
-    /// 唯独这页之前没用。
-    private var collectionsGrid: some View {
-        VStack(spacing: 0) {
-            // 「节点」让位给 HN 时才出现，避免和标签栏重复。
-            if nodesTabDisplaced {
-                collectionRow(icon: "square.grid.2x2", count: followed.names.count,
-                              title: "节点目录", caption: "已关注", route: .nodeCatalog)
-                RowSeparator(leadingInset: 52)
+    // MARK: - Library
+
+    private var librarySection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            GroupHeader(title: "我的空间", trailing: libraryCount > 0 ? "\(libraryCount) 项" : nil)
+            LazyVGrid(columns: metricColumns, spacing: 10) {
+                metricCard(
+                    icon: "star.fill",
+                    count: favorites.topics.count,
+                    title: "收藏",
+                    caption: "喜欢的话题",
+                    route: .favorites
+                )
+                metricCard(
+                    icon: "clock.arrow.circlepath",
+                    count: history.entries.count,
+                    title: "浏览历史",
+                    caption: "最近 \(HistoryStore.retentionDays) 天",
+                    route: .history
+                )
+                metricCard(
+                    icon: "arrow.down.circle.fill",
+                    count: offline.bundles.count,
+                    title: "稍后读",
+                    caption: offline.bundles.isEmpty ? "离线资料库" : offline.formattedSize,
+                    route: .offline
+                )
+                metricCard(
+                    icon: "square.text.square.fill",
+                    count: model.recentTopics.count,
+                    title: "我的话题",
+                    caption: token.hasToken ? "最近发布" : "连接后查看",
+                    route: .myPosts
+                )
             }
-            collectionRow(icon: "star", count: favorites.topics.count,
-                          title: "收藏", route: .favorites)
-            RowSeparator(leadingInset: 52)
-            collectionRow(icon: "clock.arrow.circlepath", count: history.entries.count,
-                          title: "浏览历史", caption: "保留 \(HistoryStore.retentionDays) 天",
-                          route: .history)
-            RowSeparator(leadingInset: 52)
-            collectionRow(icon: "arrow.down.circle", count: offline.bundles.count,
-                          title: "稍后读",
-                          caption: offline.bundles.isEmpty ? nil : offline.formattedSize,
-                          route: .offline)
-            RowSeparator(leadingInset: 52)
-            collectionRow(icon: "square.text.square", count: model.recentTopics.count,
-                          title: "我的话题", route: .myPosts)
-            RowSeparator(leadingInset: 52)
-            collectionRow(icon: "nosign", count: moderation.count,
-                          title: "内容与屏蔽", route: .blocked)
+            .padding(.horizontal, Theme.Metric.screenPadding)
         }
-        .background(Theme.card)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-        .padding(.horizontal, Theme.Metric.screenPadding)
     }
 
-    /// 一行一个入口，计数当右侧锚点。
-    ///
-    /// 之前这里是填充色圆角方块图标 + 行尾灰色小字计数 —— 那套配色方块正是
-    /// iOS 设置的招牌，而真正有信息量的数字被降成了配角。现在图标退成单色
-    /// 线条，计数换上设计系统那套等宽圆体数字；没有内容的项整行退到 faint，
-    /// 于是有东西的几行不必加粗也会自己浮出来。陈列了计数就不再给 chevron，
-    /// 两个尾随元素只会互相打架。
+    private func metricCard(
+        icon: String,
+        count: Int,
+        title: String,
+        caption: String,
+        route: Route
+    ) -> some View {
+        NavigationLink(value: route) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 34, height: 34)
+                        .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Spacer(minLength: 8)
+                    Text(count.formatted())
+                        .font(Type.number(24, weight: .bold))
+                        .foregroundStyle(count == 0 ? Theme.faint : Theme.ink)
+                        .contentTransition(.numericText(value: Double(count)))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                    Text(caption)
+                        .font(Type.meta(11))
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+            .background(Theme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(.row)
+    }
+
+    // MARK: - Utilities
+
+    private var utilitySection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            GroupHeader(title: "管理")
+            CardSection {
+                utilityRow(
+                    icon: "waveform.path.ecg",
+                    title: "关键词雷达",
+                    subtitle: radar.rules.isEmpty ? "追踪关键词、节点和用户" : "\(radar.rules.count) 条规则正在追踪",
+                    route: .radar
+                )
+                RowSeparator(leadingInset: 54)
+
+                if nodesTabDisplaced {
+                    utilityRow(
+                        icon: "square.grid.2x2",
+                        title: "节点目录",
+                        subtitle: "已关注 \(followed.names.count) 个节点",
+                        route: .nodeCatalog
+                    )
+                    RowSeparator(leadingInset: 54)
+                }
+
+                utilityRow(
+                    icon: "checkmark.shield",
+                    title: "内容与屏蔽",
+                    subtitle: moderation.count == 0 ? "关键词、用户与举报记录" : "\(moderation.count) 条规则正在生效",
+                    route: .blocked
+                )
+            }
+        }
+    }
+
     private var nodesTabDisplaced: Bool {
         settings.hackerNewsEnabled && settings.hackerNewsPlacement == .tab
     }
 
-    private func collectionRow(
-        icon: String,
-        count: Int,
-        title: String,
-        caption: String? = nil,
-        route: Route
-    ) -> some View {
-        let isEmpty = count == 0
-        return NavigationLink(value: route) {
+    private func utilityRow(icon: String, title: String, subtitle: String, route: Route) -> some View {
+        NavigationLink(value: route) {
             HStack(spacing: 14) {
                 Image(systemName: icon)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(isEmpty ? Theme.faint : Theme.accent)
-                    .frame(width: 22)
-
-                Text(title)
-                    .font(.system(size: 16))
-                    .foregroundStyle(isEmpty ? Theme.muted : Theme.ink)
-
-                if let caption {
-                    Text(caption)
-                        .font(Type.label(11))
-                        .foregroundStyle(Theme.faint)
-                        .lineLimit(1)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Theme.ink)
+                    Text(subtitle)
+                        .font(Type.meta(12))
+                        .foregroundStyle(Theme.muted)
                 }
-
                 Spacer(minLength: 8)
-
-                Text("\(count)")
-                    .font(Type.number(18, weight: .semibold))
-                    .foregroundStyle(isEmpty ? Theme.faint : Theme.ink)
+                Chevron()
             }
             .padding(.horizontal, Theme.Metric.cardPadding)
-            .frame(height: Theme.Metric.rowHeight)
+            .frame(minHeight: 58)
             .contentShape(Rectangle())
         }
         .buttonStyle(.row)
@@ -257,30 +351,12 @@ struct ProfileView: View {
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            GroupHeader(title: "最近发布")
-            CardSection {
-                ForEach(Array(model.recentTopics.prefix(5).enumerated()), id: \.element.id) { index, topic in
-                    NavigationLink(value: Route.topic(topic.id)) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(topic.title)
-                                .font(.system(size: 16, weight: .medium))
-                                .kerning(-0.3)
-                                .lineSpacing(2)
-                                .foregroundStyle(Theme.ink)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .multilineTextAlignment(.leading)
-                            Text("\(topic.nodeTitle) · \(RelativeTime.string(from: topic.activityDate)) · \(topic.replies) 回复")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.muted)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 13)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.row)
-                    if index < min(model.recentTopics.count, 5) - 1 { RowSeparator() }
+            GroupHeader(title: "最近发布", trailing: "\(min(model.recentTopics.count, 4)) 篇")
+            TopicListCard(items: Array(model.recentTopics.prefix(4))) { topic in
+                NavigationLink(value: Route.topic(topic.id)) {
+                    TopicRow(topic: topic, showsNode: true)
                 }
+                .buttonStyle(.row)
             }
         }
     }
