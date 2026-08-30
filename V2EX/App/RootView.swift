@@ -53,6 +53,7 @@ enum Route: Hashable {
     case hackerNews(Int)
     case offline
     case myPosts
+    case radar
     case blocked
     case terms
     case settings
@@ -327,6 +328,7 @@ struct RootView: View {
         case .hackerNews(let id): HNDetailView(itemID: id)
         case .offline: OfflineListView()
         case .myPosts: MyPostsView()
+        case .radar: RadarView()
         case .blocked: ModerationSettingsView()
         case .terms: TermsView()
         case .settings: SettingsView()

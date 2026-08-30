@@ -43,16 +43,269 @@ private struct ProfileCollectionHeader: View {
     }
 }
 
+// MARK: - 关键词雷达
+
+@MainActor
+private final class RadarViewModel: ObservableObject {
+    @Published private(set) var topics: [V2Topic] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var errorMessage: String?
+
+    func load(rules: [RadarRule]) async {
+        guard !rules.isEmpty else {
+            topics = []
+            errorMessage = nil
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        var merged = (try? await V2EXClient.shared.latestTopics()) ?? []
+
+        let nodeNames = uniqueValues(for: .node, in: rules)
+        for name in nodeNames.prefix(5) {
+            if let batch = try? await V2EXClient.shared.topics(inNode: name) {
+                merged.append(contentsOf: batch)
+            }
+        }
+
+        let members = uniqueValues(for: .member, in: rules)
+        for username in members.prefix(5) {
+            if let batch = try? await V2EXClient.shared.topics(byMember: username) {
+                merged.append(contentsOf: batch)
+            }
+        }
+
+        var seen = Set<Int>()
+        topics = merged
+            .filter { seen.insert($0.id).inserted }
+            .sorted { ($0.lastTouched ?? $0.created ?? 0) > ($1.lastTouched ?? $1.created ?? 0) }
+
+        if topics.isEmpty {
+            errorMessage = "暂时没有读取到可供雷达匹配的话题"
+        }
+    }
+
+    private func uniqueValues(for kind: RadarRuleKind, in rules: [RadarRule]) -> [String] {
+        var seen = Set<String>()
+        return rules.compactMap { rule in
+            guard rule.kind == kind else { return nil }
+            let key = rule.value.lowercased()
+            return seen.insert(key).inserted ? rule.value : nil
+        }
+    }
+}
+
+struct RadarView: View {
+    @StateObject private var model = RadarViewModel()
+    @EnvironmentObject private var radar: RadarStore
+    @EnvironmentObject private var offline: OfflineStore
+    @EnvironmentObject private var moderation: ModerationStore
+
+    @State private var kind: RadarRuleKind = .keyword
+    @State private var draft = ""
+
+    private var visibleTopics: [V2Topic] {
+        moderation.filter(model.topics.filter { radar.matches($0) })
+    }
+
+    private var ruleSignature: String {
+        radar.rules.map { "\($0.id):\($0.kind.rawValue):\($0.value)" }.joined(separator: "|")
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                ProfileCollectionHeader(
+                    icon: "waveform.path.ecg",
+                    count: visibleTopics.count,
+                    title: "条命中",
+                    message: radar.rules.isEmpty
+                        ? "添加规则，主动追踪你关心的关键词、节点或用户。"
+                        : "\(radar.rules.count) 条规则正在扫描公开话题。"
+                )
+
+                ruleEditor
+
+                if radar.rules.isEmpty {
+                    EmptyStateCard(
+                        icon: "scope",
+                        title: "创建第一条雷达规则",
+                        message: "例如追踪“SwiftUI”、programmer 节点，或某位用户的新话题。"
+                    )
+                } else if model.isLoading && model.topics.isEmpty {
+                    LoadingCard()
+                } else if let errorMessage = model.errorMessage, visibleTopics.isEmpty {
+                    EmptyStateCard(
+                        icon: "waveform.path.ecg",
+                        title: "暂时没有命中",
+                        message: errorMessage,
+                        actionTitle: "重新扫描"
+                    ) {
+                        Task { await model.load(rules: radar.rules) }
+                    }
+                } else if visibleTopics.isEmpty {
+                    EmptyStateCard(
+                        icon: "scope",
+                        title: "暂时没有命中",
+                        message: "雷达会保留规则；下次打开或下拉刷新时重新扫描。"
+                    )
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        GroupHeader(title: "雷达命中", trailing: "\(visibleTopics.count) 条")
+                        TopicListCard(items: visibleTopics) { topic in
+                            NavigationLink(value: Route.topic(topic.id)) {
+                                radarTopicRow(topic)
+                            }
+                            .buttonStyle(.row)
+                        }
+                    }
+                }
+            }
+            .readableColumn()
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.canvas)
+        .navigationTitle("关键词雷达")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .task(id: ruleSignature) {
+            await model.load(rules: radar.rules)
+        }
+        .pullToRefresh {
+            await model.load(rules: radar.rules)
+        }
+    }
+
+    private var ruleEditor: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            GroupHeader(title: "追踪规则", trailing: radar.rules.isEmpty ? nil : "\(radar.rules.count) 条")
+            CardSection {
+                Picker("规则类型", selection: $kind) {
+                    ForEach(RadarRuleKind.allCases) { item in
+                        Text(item.title).tag(item)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+
+                HStack(spacing: 8) {
+                    TextField(kind.placeholder, text: $draft)
+                        .font(.system(size: 15))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .padding(.horizontal, 12)
+                        .frame(height: 42)
+                        .background(Theme.inset, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .onSubmit(addRule)
+
+                    Button(action: addRule) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 42, height: 42)
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("添加雷达规则")
+                }
+                .padding(12)
+
+                if !radar.rules.isEmpty {
+                    RowSeparator()
+                    FlowLayout(spacing: 8) {
+                        ForEach(radar.rules) { rule in
+                            HStack(spacing: 7) {
+                                Text("\(rule.kind.title) · \(rule.value)")
+                                    .font(Type.meta(12))
+                                    .foregroundStyle(Theme.ink)
+                                Button {
+                                    radar.remove(rule)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(Theme.faint)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("删除 \(rule.value) 规则")
+                            }
+                            .padding(.leading, 10)
+                            .padding(.trailing, 7)
+                            .frame(height: 34)
+                            .background(Theme.inset, in: Capsule())
+                        }
+                    }
+                    .padding(12)
+                }
+            }
+        }
+    }
+
+    private func radarTopicRow(_ topic: V2Topic) -> some View {
+        let matches = radar.matchingRules(for: topic)
+        return VStack(alignment: .leading, spacing: 0) {
+            TopicRow(topic: topic, isOffline: offline.isOffline(topic.id))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(matches) { rule in
+                        Text(rule.value)
+                            .font(Type.label(10))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Theme.accentSoft, in: Capsule())
+                    }
+                }
+                .padding(.horizontal, Theme.Metric.cardPadding)
+            }
+            .padding(.top, -8)
+            .padding(.bottom, 11)
+        }
+    }
+
+    private func addRule() {
+        radar.add(kind: kind, value: draft)
+        draft = ""
+    }
+}
+
 // MARK: - 我的收藏
 
 struct FavoritesView: View {
+    private struct CollectionFilter: Hashable {
+        let id: String?
+        let title: String
+    }
+
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var session: V2EXSessionStore
     @EnvironmentObject private var moderation: ModerationStore
     @State private var reportTarget: ModerationTarget?
+    @State private var organizerTopic: V2Topic?
+    @State private var showsNewCollection = false
+    @State private var selectedCollectionID: String?
 
-    private var visibleTopics: [V2Topic] { moderation.filter(favorites.topics) }
+    private var filters: [CollectionFilter] {
+        [CollectionFilter(id: nil, title: "全部")] + favorites.collections.map {
+            CollectionFilter(id: $0.id, title: $0.name)
+        }
+    }
+
+    private var selectedFilter: CollectionFilter {
+        filters.first(where: { $0.id == selectedCollectionID }) ?? filters[0]
+    }
+
+    private var visibleTopics: [V2Topic] {
+        moderation.filter(favorites.topics(in: selectedCollectionID))
+    }
 
     var body: some View {
         ScrollView {
@@ -61,24 +314,31 @@ struct FavoritesView: View {
                     icon: "star.fill",
                     count: visibleTopics.count,
                     title: "篇收藏",
-                    message: session.isLoggedIn ? "已连接网页收藏，本地内容会合并保留。" : "保存在本机；登录 V2EX 后可合并网页收藏。"
+                    message: session.isLoggedIn ? "已连接网页收藏；收藏夹、标签和备注保存在本机。" : "使用收藏夹、标签和备注整理本机内容。"
                 )
+
+                collectionRail
 
                 if visibleTopics.isEmpty {
                     EmptyStateCard(
                         icon: "star",
-                        title: "还没有收藏",
-                        message: "阅读话题时点右上角的星标，之后就能从这里快速返回。"
+                        title: selectedCollectionID == nil ? "还没有收藏" : "这个收藏夹还是空的",
+                        message: "阅读话题时点右上角的星标，再长按收藏内容进行整理。"
                     )
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
-                        GroupHeader(title: "收藏的话题", trailing: "\(visibleTopics.count) 篇")
+                        GroupHeader(title: selectedFilter.title, trailing: "\(visibleTopics.count) 篇")
                         TopicListCard(items: visibleTopics) { topic in
                             NavigationLink(value: Route.topic(topic.id)) {
-                                TopicRow(topic: topic, isOffline: offline.isOffline(topic.id))
+                                favoriteTopicRow(topic)
                             }
                             .buttonStyle(.row)
                             .contextMenu {
+                                Button {
+                                    organizerTopic = topic
+                                } label: {
+                                    Label("整理收藏", systemImage: "folder")
+                                }
                                 Button(role: .destructive) {
                                     favorites.toggle(topic)
                                 } label: {
@@ -103,12 +363,233 @@ struct FavoritesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .sheet(item: $reportTarget) { ReportSheet(target: $0) }
+        .sheet(item: $organizerTopic) { topic in
+            FavoriteOrganizerSheet(topic: topic)
+        }
+        .sheet(isPresented: $showsNewCollection) {
+            NewFavoriteCollectionSheet { id in
+                selectedCollectionID = id
+            }
+        }
         .task {
             await favorites.syncFromRemote(cookie: session.cookie)
         }
         .pullToRefresh {
             await favorites.syncFromRemote(cookie: session.cookie, maxPages: 1)
         }
+    }
+
+    private var collectionRail: some View {
+        ChipRail(
+            items: filters,
+            selected: selectedFilter,
+            label: { filter in
+                FilterChip(title: filter.title, isSelected: selectedCollectionID == filter.id) {
+                    selectedCollectionID = filter.id
+                }
+                .id(filter)
+                .contextMenu {
+                    if let id = filter.id, id != FavoritesStore.inboxCollectionID {
+                        Button(role: .destructive) {
+                            favorites.removeCollection(id)
+                            if selectedCollectionID == id { selectedCollectionID = nil }
+                        } label: {
+                            Label("删除收藏夹", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        ) {
+            Button {
+                showsNewCollection = true
+            } label: {
+                Label("新建", systemImage: "folder.badge.plus")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 13)
+                    .frame(height: 32)
+                    .glassPill()
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func favoriteTopicRow(_ topic: V2Topic) -> some View {
+        let details = favorites.details(for: topic.id)
+        return VStack(alignment: .leading, spacing: 0) {
+            TopicRow(topic: topic, isOffline: offline.isOffline(topic.id))
+            if !details.tags.isEmpty || !details.note.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(details.tags.prefix(3), id: \.self) { tag in
+                        Text(tag)
+                            .font(Type.label(10))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Theme.accentSoft, in: Capsule())
+                    }
+                    if !details.note.isEmpty {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.muted)
+                            .accessibilityLabel("有收藏备注")
+                    }
+                }
+                .padding(.horizontal, Theme.Metric.cardPadding)
+                .padding(.top, -7)
+                .padding(.bottom, 11)
+            }
+        }
+    }
+}
+
+private struct NewFavoriteCollectionSheet: View {
+    let onCreated: (String) -> Void
+    @EnvironmentObject private var favorites: FavoritesStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("用收藏夹把长期资料与临时关注分开。")
+                    .font(Type.body(14))
+                    .foregroundStyle(Theme.muted)
+                TextField("收藏夹名称", text: $name)
+                    .font(.system(size: 16))
+                    .padding(.horizontal, 13)
+                    .frame(height: 46)
+                    .background(Theme.inset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Button {
+                    if let id = favorites.addCollection(named: name) {
+                        onCreated(id)
+                        dismiss()
+                    }
+                } label: {
+                    Text("创建收藏夹")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Spacer()
+            }
+            .padding(18)
+            .background(Theme.canvas)
+            .navigationTitle("新建收藏夹")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+private struct FavoriteOrganizerSheet: View {
+    let topic: V2Topic
+    @EnvironmentObject private var favorites: FavoritesStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var collectionID = FavoritesStore.inboxCollectionID
+    @State private var tagsText = ""
+    @State private var note = ""
+    @State private var loaded = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    CardSection(padding: 16) {
+                        Text(topic.title)
+                            .font(Type.title(16))
+                            .foregroundStyle(Theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupHeader(title: "收藏夹")
+                        CardSection {
+                            Picker("收藏夹", selection: $collectionID) {
+                                ForEach(favorites.collections) { collection in
+                                    Text(collection.name).tag(collection.id)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .padding(.horizontal, 16)
+                            .frame(minHeight: 52)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupHeader(title: "标签")
+                        CardSection(padding: 14) {
+                            TextField("用逗号分隔，例如 AI, 待评估", text: $tagsText)
+                                .font(.system(size: 15))
+                                .padding(.horizontal, 12)
+                                .frame(height: 44)
+                                .background(Theme.inset, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupHeader(title: "备注")
+                        CardSection(padding: 14) {
+                            TextEditor(text: $note)
+                                .font(.system(size: 15))
+                                .frame(minHeight: 110)
+                                .scrollContentBackground(.hidden)
+                                .padding(8)
+                                .background(Theme.inset, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        }
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 30)
+            }
+            .scrollIndicators(.hidden)
+            .background(Theme.canvas)
+            .navigationTitle("整理收藏")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") { save() }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+        .onAppear { loadIfNeeded() }
+    }
+
+    private func loadIfNeeded() {
+        guard !loaded else { return }
+        let details = favorites.details(for: topic.id)
+        collectionID = details.collectionID
+        tagsText = details.tags.joined(separator: ", ")
+        note = details.note
+        loaded = true
+    }
+
+    private func save() {
+        let tags = tagsText
+            .replacingOccurrences(of: "，", with: ",")
+            .split(separator: ",")
+            .map(String.init)
+        favorites.organize(
+            topicID: topic.id,
+            collectionID: collectionID,
+            tags: tags,
+            note: note
+        )
+        dismiss()
     }
 }
 

@@ -34,6 +34,7 @@ struct ProfileView: View {
     @EnvironmentObject private var token: TokenStore
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var offline: OfflineStore
+    @EnvironmentObject private var radar: RadarStore
     @EnvironmentObject private var moderation: ModerationStore
     @EnvironmentObject private var history: HistoryStore
     @EnvironmentObject private var settings: AppSettings
@@ -291,6 +292,14 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 0) {
             GroupHeader(title: "管理")
             CardSection {
+                utilityRow(
+                    icon: "waveform.path.ecg",
+                    title: "关键词雷达",
+                    subtitle: radar.rules.isEmpty ? "追踪关键词、节点和用户" : "\(radar.rules.count) 条规则正在追踪",
+                    route: .radar
+                )
+                RowSeparator(leadingInset: 54)
+
                 if nodesTabDisplaced {
                     utilityRow(
                         icon: "square.grid.2x2",

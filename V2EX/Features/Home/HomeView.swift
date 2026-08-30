@@ -237,6 +237,15 @@ struct HomeView: View {
                 } else if visibleTopics.isEmpty {
                     EmptyStateCard(icon: "tray", title: "这里还没有话题")
                 } else {
+                    // The public feed opens with a compact live map of where
+                    // the current conversation is concentrated. It makes the
+                    // first screen recognisably v2Explore without changing the
+                    // familiar topic-list interaction below.
+                    if feed == .all, settings.communityPulseEnabled {
+                        CommunityPulseCard(topics: visibleTopics)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     // Lead card, then the rest as a grouped list — as in the design.
                     if let featured = visibleTopics.first {
                         NavigationLink(value: Route.topic(featured.id)) {
@@ -290,6 +299,130 @@ struct HomeView: View {
             get: { scrollPositions[feed] ?? ScrollPosition() },
             set: { scrollPositions[feed] = $0 }
         )
+    }
+}
+
+// MARK: - Community pulse
+
+private struct CommunityPulseCard: View {
+    private struct Signal: Identifiable {
+        let name: String
+        let title: String
+        let topicCount: Int
+        let replies: Int
+        var id: String { name }
+        var score: Int { replies + topicCount * 2 }
+    }
+
+    let topics: [V2Topic]
+    @EnvironmentObject private var radar: RadarStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var signals: [Signal] {
+        var buckets: [String: (title: String, topics: Int, replies: Int)] = [:]
+        for topic in topics.prefix(30) {
+            guard let node = topic.node, !node.name.isEmpty else { continue }
+            var bucket = buckets[node.name] ?? (node.title, 0, 0)
+            bucket.topics += 1
+            bucket.replies += topic.replies
+            buckets[node.name] = bucket
+        }
+        let mapped: [Signal] = buckets.map { entry in
+            let name = entry.key
+            let value = entry.value
+            return Signal(
+                name: name,
+                title: value.title,
+                topicCount: value.topics,
+                replies: value.replies
+            )
+        }
+        let sorted = mapped.sorted { lhs, rhs in
+            if lhs.score == rhs.score { return lhs.title < rhs.title }
+            return lhs.score > rhs.score
+        }
+        return Array(sorted.prefix(3))
+    }
+
+    private var maxScore: Int { max(signals.map(\.score).max() ?? 1, 1) }
+    private var sampledTopicCount: Int { min(topics.count, 30) }
+    private var sampledReplyCount: Int { topics.prefix(30).reduce(0) { $0 + $1.replies } }
+
+    var body: some View {
+        CardSection(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("社区脉搏")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Theme.ink)
+                        Text("当前讨论集中在哪里")
+                            .font(Type.meta(11))
+                            .foregroundStyle(Theme.muted)
+                    }
+                    Spacer(minLength: 8)
+                    NavigationLink(value: Route.radar) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 14, weight: .medium))
+                            Text(radar.rules.isEmpty ? "雷达" : "雷达 \(radar.rules.count)")
+                                .font(Type.meta(11))
+                        }
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 11)
+                        .frame(height: 34)
+                        .glassPill()
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("打开关键词雷达，\(radar.rules.count) 条规则")
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(signals) { signal in
+                        NavigationLink(value: Route.node(signal.name)) {
+                            HStack(spacing: 10) {
+                                Text(signal.title)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(Theme.body)
+                                    .lineLimit(1)
+                                    .frame(width: 68, alignment: .leading)
+
+                                GeometryReader { proxy in
+                                    let progress = CGFloat(signal.score) / CGFloat(maxScore)
+                                    ZStack(alignment: .leading) {
+                                        Capsule().fill(Theme.inset)
+                                        Capsule()
+                                            .fill(Theme.accent.opacity(0.28))
+                                            .frame(width: max(10, proxy.size.width * progress))
+                                        Circle()
+                                            .fill(Theme.accent)
+                                            .frame(width: 7, height: 7)
+                                            .offset(x: max(3, proxy.size.width * progress - 7))
+                                    }
+                                    .animation(reduceMotion ? nil : .snappy(duration: 0.3), value: progress)
+                                }
+                                .frame(height: 7)
+
+                                Text("\(signal.replies)")
+                                    .font(Type.number(12, weight: .medium))
+                                    .foregroundStyle(Theme.muted)
+                                    .frame(minWidth: 28, alignment: .trailing)
+                            }
+                            .frame(minHeight: 28)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.row)
+                        .accessibilityLabel(
+                            "\(signal.title)，\(signal.topicCount) 个话题，\(signal.replies) 条回复"
+                        )
+                    }
+                }
+
+                Text("采样 \(sampledTopicCount) 个话题 · \(sampledReplyCount) 条回复")
+                    .font(Type.meta(10))
+                    .foregroundStyle(Theme.faint)
+            }
+        }
     }
 }
 

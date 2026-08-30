@@ -110,6 +110,31 @@ struct SettingsView: View {
                     GroupHeader(title: "实验性功能")
                     CardSection {
                         HStack(spacing: 14) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 17))
+                                .foregroundStyle(settings.communityPulseEnabled ? Theme.accent : Theme.faint)
+                                .frame(width: 22)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("社区脉搏")
+                                    .font(.system(size: 17))
+                                    .kerning(-0.43)
+                                    .foregroundStyle(Theme.ink)
+                                Text("在首页显示当前话题中的活跃节点与回复分布")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Theme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 8)
+                            Toggle("", isOn: $settings.communityPulseEnabled)
+                                .labelsHidden()
+                                .accessibilityLabel("社区脉搏")
+                        }
+                        .padding(.horizontal, Theme.Metric.cardPadding)
+                        .padding(.vertical, 10)
+
+                        RowSeparator(leadingInset: 54)
+
+                        HStack(spacing: 14) {
                             Image(systemName: "flask")
                                 .font(.system(size: 17))
                                 .foregroundStyle(settings.hackerNewsEnabled ? Theme.accent : Theme.faint)

@@ -183,12 +183,39 @@ final class ReadStateStore: ObservableObject {
 
 @MainActor
 final class FavoritesStore: ObservableObject {
+    struct Collection: Codable, Identifiable, Hashable {
+        let id: String
+        var name: String
+        let createdAt: Date
+    }
+
+    struct Organization: Codable, Hashable {
+        var collectionID: String
+        var tags: [String]
+        var note: String
+    }
+
+    private struct OrganizationState: Codable {
+        var collections: [Collection]
+        var organization: [Int: Organization]
+    }
+
+    static let inboxCollectionID = "inbox"
+
     @Published private(set) var topics: [V2Topic] = []
+    @Published private(set) var collections: [Collection] = []
+    @Published private(set) var organization: [Int: Organization] = [:]
 
     private let file = DiskStore.url(for: "favorites.json")
+    private let organizationFile = DiskStore.url(for: "favorite-organization.json")
 
     init() {
         topics = DiskStore.load([V2Topic].self, from: file) ?? []
+        if let stored = DiskStore.load(OrganizationState.self, from: organizationFile) {
+            collections = stored.collections
+            organization = stored.organization
+        }
+        ensureInboxCollection()
     }
 
     func contains(_ id: Int) -> Bool { topics.contains { $0.id == id } }
@@ -196,10 +223,72 @@ final class FavoritesStore: ObservableObject {
     func toggle(_ topic: V2Topic) {
         if let index = topics.firstIndex(where: { $0.id == topic.id }) {
             topics.remove(at: index)
+            organization.removeValue(forKey: topic.id)
         } else {
             topics.insert(topic, at: 0)
         }
-        DiskStore.save(topics, to: file)
+        persist()
+    }
+
+    func collection(for topicID: Int) -> Collection {
+        let collectionID = organization[topicID]?.collectionID ?? Self.inboxCollectionID
+        return collections.first(where: { $0.id == collectionID }) ?? inboxCollection
+    }
+
+    func details(for topicID: Int) -> Organization {
+        organization[topicID] ?? Organization(
+            collectionID: Self.inboxCollectionID,
+            tags: [],
+            note: ""
+        )
+    }
+
+    func topics(in collectionID: String?) -> [V2Topic] {
+        guard let collectionID else { return topics }
+        return topics.filter { details(for: $0.id).collectionID == collectionID }
+    }
+
+    @discardableResult
+    func addCollection(named name: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !collections.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame })
+        else { return nil }
+        let collection = Collection(id: UUID().uuidString, name: trimmed, createdAt: Date())
+        collections.append(collection)
+        persistOrganization()
+        return collection.id
+    }
+
+    func removeCollection(_ id: String) {
+        guard id != Self.inboxCollectionID else { return }
+        collections.removeAll { $0.id == id }
+        let affectedTopicIDs = organization.compactMap { topicID, details in
+            details.collectionID == id ? topicID : nil
+        }
+        for topicID in affectedTopicIDs {
+            organization[topicID]?.collectionID = Self.inboxCollectionID
+        }
+        persistOrganization()
+    }
+
+    func organize(topicID: Int, collectionID: String, tags: [String], note: String) {
+        let validCollection = collections.contains(where: { $0.id == collectionID })
+            ? collectionID
+            : Self.inboxCollectionID
+        var seen = Set<String>()
+        let cleanTags = tags.compactMap { raw -> String? in
+            let tag = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !tag.isEmpty else { return nil }
+            let key = tag.lowercased()
+            return seen.insert(key).inserted ? tag : nil
+        }
+        organization[topicID] = Organization(
+            collectionID: validCollection,
+            tags: Array(cleanTags.prefix(8)),
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        persistOrganization()
     }
 
     /// 拉取 V2EX 网页收藏并合并进本地（登录态）。本地已有的保留，
@@ -214,7 +303,109 @@ final class FavoritesStore: ObservableObject {
         let fresh = remote.filter { !existing.contains($0.id) }
         guard !fresh.isEmpty else { return }
         topics.insert(contentsOf: fresh, at: 0)
+        persist()
+    }
+
+    private var inboxCollection: Collection {
+        Collection(id: Self.inboxCollectionID, name: "收件箱", createdAt: .distantPast)
+    }
+
+    private func ensureInboxCollection() {
+        if let index = collections.firstIndex(where: { $0.id == Self.inboxCollectionID }) {
+            collections[index].name = "收件箱"
+        } else {
+            collections.insert(inboxCollection, at: 0)
+        }
+        persistOrganization()
+    }
+
+    private func persist() {
         DiskStore.save(topics, to: file)
+        persistOrganization()
+    }
+
+    private func persistOrganization() {
+        DiskStore.save(
+            OrganizationState(collections: collections, organization: organization),
+            to: organizationFile
+        )
+    }
+}
+
+// MARK: - Radar
+
+enum RadarRuleKind: String, Codable, CaseIterable, Identifiable {
+    case keyword, node, member
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .keyword: return "关键词"
+        case .node: return "节点"
+        case .member: return "用户"
+        }
+    }
+
+    var placeholder: String {
+        switch self {
+        case .keyword: return "例如 SwiftUI"
+        case .node: return "例如 programmer"
+        case .member: return "例如 xinghelee"
+        }
+    }
+}
+
+struct RadarRule: Codable, Identifiable, Hashable {
+    let id: UUID
+    let kind: RadarRuleKind
+    var value: String
+    let createdAt: Date
+}
+
+@MainActor
+final class RadarStore: ObservableObject {
+    @Published private(set) var rules: [RadarRule] = []
+    private let file = DiskStore.url(for: "radar-rules.json")
+
+    init() {
+        rules = DiskStore.load([RadarRule].self, from: file) ?? []
+    }
+
+    func add(kind: RadarRuleKind, value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !rules.contains(where: {
+                  $0.kind == kind && $0.value.caseInsensitiveCompare(trimmed) == .orderedSame
+              }) else { return }
+        rules.append(RadarRule(id: UUID(), kind: kind, value: trimmed, createdAt: Date()))
+        persist()
+    }
+
+    func remove(_ rule: RadarRule) {
+        rules.removeAll { $0.id == rule.id }
+        persist()
+    }
+
+    func matchingRules(for topic: V2Topic) -> [RadarRule] {
+        rules.filter { rule in
+            switch rule.kind {
+            case .keyword:
+                let text = topic.title + " " + (topic.content ?? "")
+                return text.localizedCaseInsensitiveContains(rule.value)
+            case .node:
+                return topic.node?.name.caseInsensitiveCompare(rule.value) == .orderedSame
+                    || topic.nodeTitle.caseInsensitiveCompare(rule.value) == .orderedSame
+            case .member:
+                return topic.authorName.caseInsensitiveCompare(rule.value) == .orderedSame
+            }
+        }
+    }
+
+    func matches(_ topic: V2Topic) -> Bool { !matchingRules(for: topic).isEmpty }
+
+    private func persist() {
+        DiskStore.save(rules, to: file)
     }
 }
 

@@ -16,6 +16,7 @@ struct TopicDetailView: View {
     @EnvironmentObject private var moderation: ModerationStore
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var replyError: String?
     @State private var showReplyError = false
@@ -28,26 +29,32 @@ struct TopicDetailView: View {
     @FocusState private var composerFocused: Bool
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             Theme.canvas.ignoresSafeArea()
 
             // iPad 宽屏（横屏 / 大窗）双栏阅读：正文居左、楼层回复居右，
             // 各自独立滚动；窄屏（iPhone / iPad 竖屏窄窗）保持单栏同轴。
             GeometryReader { geo in
-                if geo.size.width > twoPaneWidthThreshold {
-                    twoPaneContent
-                } else {
-                    singlePaneContent
+                let usesTwoPane = geo.size.width > twoPaneWidthThreshold
+                ZStack(alignment: .bottom) {
+                    if usesTwoPane {
+                        twoPaneContent
+                    } else {
+                        singlePaneContent
+                    }
+
+                    // In two-pane reading the composer belongs to the reply
+                    // pane, not the physical centre of the whole display.
+                    replyComposer
+                        .frame(maxWidth: usesTwoPane ? min(geo.size.width / 2, 720) : 720)
+                        .frame(maxWidth: .infinity, alignment: usesTwoPane ? .trailing : .center)
+                        .offset(y: isComposerHidden ? 110 : 0)
+                        .opacity(isComposerHidden ? 0 : 1)
+                        .allowsHitTesting(!isComposerHidden)
+                        .accessibilityHidden(isComposerHidden)
+                        .animation(.snappy(duration: 0.24), value: isComposerHidden)
                 }
             }
-
-            replyComposer
-                .readableColumn()
-                .offset(y: isComposerHidden ? 110 : 0)
-                .opacity(isComposerHidden ? 0 : 1)
-                .allowsHitTesting(!isComposerHidden)
-                .accessibilityHidden(isComposerHidden)
-                .animation(.snappy(duration: 0.24), value: isComposerHidden)
         }
         .navigationBarTitleDisplayMode(.inline)
         // The floating reply composer owns the bottom of this screen.
@@ -136,6 +143,7 @@ struct TopicDetailView: View {
                             )
                         }
                         replyHeader(topic)
+                        discussionTrack(proxy)
                         replyList
                     } else if model.isLoading {
                         LoadingCard().padding(.top, 8)
@@ -209,6 +217,7 @@ struct TopicDetailView: View {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         if let topic = model.topic {
                             replyHeader(topic)
+                            discussionTrack(proxy)
                             replyList
                         }
                     }
@@ -557,6 +566,39 @@ struct TopicDetailView: View {
         .padding(.top, 2)
     }
 
+    // MARK: Discussion track
+
+    @ViewBuilder
+    private func discussionTrack(_ proxy: ScrollViewProxy) -> some View {
+        let visible = moderation.visible(model.visibleReplies)
+        if visible.count > 1 {
+            DiscussionTrack(
+                items: sampledTrackItems(from: visible),
+                totalCount: visible.count
+            ) { item in
+                if reduceMotion {
+                    proxy.scrollTo(item.id, anchor: .top)
+                } else {
+                    withAnimation(.snappy(duration: 0.28)) {
+                        proxy.scrollTo(item.id, anchor: .top)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Keep the map readable even on a thread with hundreds of floors. First
+    /// and last are always present; the points between them are evenly sampled.
+    private func sampledTrackItems(from items: [ThreadedReply]) -> [ThreadedReply] {
+        let maximum = 8
+        guard items.count > maximum else { return items }
+        return (0..<maximum).map { position in
+            let ratio = Double(position) / Double(maximum - 1)
+            let index = Int((ratio * Double(items.count - 1)).rounded())
+            return items[index]
+        }
+    }
+
     /// 举报过的话题不再画正文和回复 —— 举报的语义是「我不想再看到它」，
     /// 从链接、历史或收藏再点进来也一样。
     private var hiddenTopicCard: some View {
@@ -796,6 +838,82 @@ struct TopicDetailView: View {
             }
             showReplyError = true
         }
+    }
+}
+
+// MARK: - Discussion track
+
+private struct DiscussionTrack: View {
+    let items: [ThreadedReply]
+    let totalCount: Int
+    let onSelect: (ThreadedReply) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Label("讨论轨道", systemImage: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                Spacer()
+                Text("\(totalCount) 层")
+                    .font(Type.number(11, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+            }
+
+            ZStack {
+                Capsule()
+                    .fill(Theme.separator)
+                    .frame(height: 1)
+                    .padding(.horizontal, 18)
+
+                HStack(spacing: 0) {
+                    ForEach(items) { item in
+                        Button {
+                            onSelect(item)
+                        } label: {
+                            VStack(spacing: 4) {
+                                Group {
+                                    if item.isAuthor {
+                                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                            .fill(Theme.accent)
+                                            .rotationEffect(.degrees(45))
+                                    } else {
+                                        Circle().fill(Theme.card)
+                                            .overlay {
+                                                Circle().strokeBorder(Theme.accent.opacity(0.7), lineWidth: 1.25)
+                                            }
+                                    }
+                                }
+                                .frame(width: item.isAuthor ? 9 : 8, height: item.isAuthor ? 9 : 8)
+
+                                Text("\(item.floor)")
+                                    .font(Type.number(9, weight: .medium))
+                                    .foregroundStyle(item.isAuthor ? Theme.accent : Theme.muted)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(
+                            "跳到第 \(item.floor) 楼\(item.isAuthor ? "，楼主回复" : "")"
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 5)
+            .padding(.vertical, 4)
+            .glassPill(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .padding(13)
+        .background(Theme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Theme.separator, lineWidth: Theme.Metric.hairline)
+        }
+        .padding(.horizontal, Theme.Metric.screenPadding)
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 
