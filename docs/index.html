@@ -3,56 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#087a5b">
-  <meta name="description" content="v2Explore · Way to Explore，一款为 iOS 26 设计的 V2EX 客户端。">
+  <meta name="theme-color" content="#f7f7f4">
+  <meta name="description" content="v2Explore，一款为 iPhone 与 iPad 打造的 V2EX 原生客户端。">
+  <meta property="og:title" content="v2Explore · Way to Explore">
+  <meta property="og:description" content="更舒服地逛 V2EX。为 iPhone 与 iPad 打造的原生客户端。">
+  <meta property="og:image" content="ios-native-prototype.png">
   <title>v2Explore · Way to Explore</title>
   <link rel="icon" type="image/png" href="app-icon.png?v=20260805">
   <style>
     :root {
       color-scheme: light;
-      --canvas: #f3f5f2;
-      --paper: #ffffff;
-      --ink: #121714;
-      --muted: #626b66;
-      --line: rgba(18, 23, 20, 0.12);
-      --accent: #087a5b;
-      --accent-strong: #005843;
-      --amber: #e9a239;
+      --background: #f7f7f4;
+      --surface: #ffffff;
+      --surface-muted: #eeefeb;
+      --text: #171a18;
+      --secondary: #686e6a;
+      --green: #087a5b;
+      --green-dark: #075d47;
+      --green-pale: #dcebe4;
+      --border: #dcded9;
+      --shadow: 0 24px 70px rgba(29, 40, 34, 0.12);
+      --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", sans-serif;
     }
 
-    * {
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-    }
-
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
-      background: var(--canvas);
-      color: var(--ink);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
-      letter-spacing: 0;
+      overflow-x: hidden;
+      background: var(--background);
+      color: var(--text);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
     }
+    a { color: inherit; }
+    img { display: block; max-width: 100%; }
+    ::selection { background: var(--green-pale); }
 
-    a {
-      color: inherit;
+    .container {
+      width: min(1120px, calc(100% - 48px));
+      margin-inline: auto;
     }
 
     .site-header {
-      position: absolute;
-      inset: 0 0 auto;
-      z-index: 3;
+      position: relative;
+      z-index: 10;
+      background: var(--background);
+    }
+
+    .nav {
       display: flex;
+      min-height: 76px;
       align-items: center;
       justify-content: space-between;
-      min-height: 72px;
-      padding: 12px max(24px, calc((100vw - 1180px) / 2));
-      border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.88);
-      backdrop-filter: blur(18px) saturate(140%);
-      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      border-bottom: 1px solid var(--border);
     }
 
     .brand {
@@ -60,344 +64,558 @@
       align-items: center;
       gap: 11px;
       text-decoration: none;
-      font-size: 17px;
-      font-weight: 700;
     }
 
     .brand img {
-      width: 42px;
-      height: 42px;
+      width: 38px;
+      height: 38px;
       border-radius: 10px;
-      box-shadow: 0 4px 14px rgba(0, 88, 67, 0.2);
     }
 
-    .github-link {
-      color: var(--muted);
-      font-size: 14px;
+    .brand-text {
+      display: flex;
+      align-items: baseline;
+      gap: 9px;
+    }
+
+    .brand-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-tagline {
+      color: var(--secondary);
+      font-size: 11px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      font-size: 13px;
       font-weight: 600;
+    }
+
+    .nav-links a {
+      color: var(--secondary);
       text-decoration: none;
     }
 
-    .github-link:hover {
-      color: var(--accent);
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-links .nav-download {
+      min-height: 38px;
+      padding: 10px 15px;
+      border-radius: 9px;
+      background: var(--text);
+      color: #fff;
     }
 
     .hero {
-      position: relative;
-      display: flex;
-      min-height: calc(100svh - 150px);
-      align-items: flex-end;
-      overflow: hidden;
-      isolation: isolate;
-      background-color: #eef0ed;
+      padding: 100px 0 90px;
     }
 
-    .hero-visual {
-      position: absolute;
-      inset: 72px 0 0;
-      z-index: -2;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      gap: clamp(14px, 2vw, 28px);
-      overflow: hidden;
-      padding: 24px max(20px, calc((100vw - 1360px) / 2));
+    .hero-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.88fr) minmax(510px, 1.12fr);
+      align-items: center;
+      gap: 76px;
     }
 
-    .hero-shot {
-      width: clamp(210px, 22vw, 320px);
-      height: auto;
-      flex: 0 0 auto;
-      border: 1px solid rgba(18, 23, 20, 0.08);
-      border-radius: clamp(32px, 3vw, 48px);
-      box-shadow: 0 18px 38px rgba(18, 23, 20, 0.18);
-    }
-
-    .hero-copy {
-      width: 100%;
-      padding: 38px max(24px, calc((100vw - 1180px) / 2)) 42px;
-      border-top: 1px solid rgba(18, 23, 20, 0.1);
-      background: rgba(255, 255, 255, 0.9);
-      backdrop-filter: blur(22px) saturate(145%);
-      -webkit-backdrop-filter: blur(22px) saturate(145%);
-    }
-
-    .eyebrow {
-      margin: 0 0 8px;
-      color: var(--accent);
-      font-size: 14px;
-      font-weight: 700;
-    }
-
-    .tagline {
-      margin: 10px 0 0;
-      color: var(--accent);
-      font-size: 17px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
+    .overline {
+      margin: 0 0 20px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 650;
     }
 
     h1 {
+      max-width: 540px;
       margin: 0;
-      font-size: 54px;
-      line-height: 1.05;
-      letter-spacing: 0;
+      font-size: clamp(52px, 5.2vw, 70px);
+      font-weight: 720;
+      letter-spacing: -0.055em;
+      line-height: 1.08;
     }
 
-    .summary {
-      max-width: 650px;
-      margin: 16px 0 24px;
-      color: var(--muted);
-      font-size: 18px;
-      line-height: 1.65;
+    .hero-copy {
+      max-width: 500px;
+      margin: 25px 0 31px;
+      color: var(--secondary);
+      font-size: 17px;
+      line-height: 1.75;
     }
 
     .actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 14px;
+      gap: 11px;
     }
 
-    .install-button {
+    .button {
       display: inline-flex;
       min-height: 50px;
       align-items: center;
       justify-content: center;
-      gap: 10px;
-      padding: 0 22px;
-      border: 1px solid var(--accent-strong);
-      border-radius: 8px;
-      background: var(--accent);
-      color: white;
-      font-size: 16px;
-      font-weight: 700;
+      gap: 9px;
+      padding: 0 19px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: var(--surface);
+      font-size: 14px;
+      font-weight: 650;
       text-decoration: none;
-      box-shadow: 0 8px 24px rgba(0, 88, 67, 0.18);
-      transition: transform 160ms ease, background 160ms ease;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
     }
 
-    .install-button:hover {
-      background: var(--accent-strong);
+    .button:hover {
+      border-color: #bdc2bc;
       transform: translateY(-1px);
     }
 
-    .install-button.secondary {
-      border-color: var(--line);
-      background: var(--paper);
-      color: var(--accent-strong);
-      box-shadow: none;
+    .button.primary {
+      border-color: var(--green);
+      background: var(--green);
+      color: #fff;
     }
 
-    .install-button.secondary:hover {
-      border-color: var(--accent-strong);
-      background: rgba(8, 122, 91, 0.06);
-    }
-
-    .install-button:focus-visible,
-    .github-link:focus-visible,
-    .brand:focus-visible {
-      outline: 3px solid rgba(233, 162, 57, 0.7);
-      outline-offset: 3px;
-    }
+    .button.primary:hover { background: var(--green-dark); }
 
     .requirement {
-      color: var(--muted);
-      font-size: 13px;
+      margin: 17px 0 0;
+      color: #8a8f8b;
+      font-size: 12px;
     }
 
-    .features {
-      padding: 68px max(24px, calc((100vw - 1180px) / 2)) 76px;
-      background: var(--paper);
+    .hero-visual {
+      position: relative;
+      min-height: 610px;
+      overflow: hidden;
+      border-radius: 32px;
+      background: var(--surface-muted);
     }
 
-    .features h2 {
-      max-width: 620px;
-      margin: 0 0 34px;
-      font-size: 30px;
-      line-height: 1.2;
-      letter-spacing: 0;
+    .hero-visual::after {
+      position: absolute;
+      right: 28px;
+      bottom: 24px;
+      color: #a3aaa5;
+      content: "v2Explore for iOS";
+      font-size: 11px;
     }
 
-    .feature-grid {
+    .phone {
+      position: absolute;
+      overflow: hidden;
+      border: 6px solid #181b19;
+      border-radius: 39px;
+      background: #181b19;
+      box-shadow: var(--shadow);
+    }
+
+    .phone img {
+      width: 100%;
+      height: 100%;
+      border-radius: 32px;
+      object-fit: cover;
+    }
+
+    .phone.home {
+      z-index: 2;
+      top: 44px;
+      left: 50%;
+      width: 274px;
+      aspect-ratio: 1320 / 2868;
+      transform: translateX(-31%);
+    }
+
+    .phone.topic {
+      z-index: 1;
+      top: 118px;
+      left: 34px;
+      width: 218px;
+      aspect-ratio: 1320 / 2868;
+      opacity: 0.88;
+      transform: rotate(-4deg);
+    }
+
+    .fact-row {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .facts {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 36px;
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .fact {
+      padding: 25px 30px;
+    }
+
+    .fact + .fact { border-left: 1px solid var(--border); }
+    .fact strong { display: block; margin-bottom: 4px; font-size: 14px; }
+    .fact span { color: var(--secondary); font-size: 12px; }
+
+    .section {
+      padding: 110px 0;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 1fr 0.78fr;
+      align-items: end;
+      gap: 80px;
+      margin-bottom: 52px;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(35px, 4vw, 50px);
+      font-weight: 700;
+      letter-spacing: -0.045em;
+      line-height: 1.16;
+    }
+
+    .section-intro {
+      margin: 0;
+      color: var(--secondary);
+      font-size: 15px;
+      line-height: 1.75;
+    }
+
+    .screens {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .screen {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
+    }
+
+    .screen-image {
+      overflow: hidden;
+      aspect-ratio: 0.59;
+      background: var(--surface-muted);
+    }
+
+    .screen-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top;
+      transition: transform 320ms ease;
+    }
+
+    .screen:hover img { transform: scale(1.015); }
+
+    .screen figcaption {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 15px 16px 17px;
+    }
+
+    .screen figcaption strong { font-size: 14px; }
+    .screen figcaption span { color: #939995; font-size: 11px; }
+
+    .features-section {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .feature-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-top: 1px solid var(--border);
     }
 
     .feature {
-      padding-top: 18px;
-      border-top: 3px solid var(--accent);
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 18px;
+      padding: 32px 34px 35px 0;
+      border-bottom: 1px solid var(--border);
     }
 
-    .feature:nth-child(2) {
-      border-color: var(--amber);
+    .feature:nth-child(even) {
+      padding-right: 0;
+      padding-left: 34px;
+      border-left: 1px solid var(--border);
     }
 
-    .feature:nth-child(3) {
-      border-color: var(--ink);
+    .feature-number {
+      color: #9ba09d;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
     }
 
     .feature h3 {
       margin: 0 0 9px;
-      font-size: 18px;
-      letter-spacing: 0;
+      font-size: 19px;
+      letter-spacing: -0.02em;
     }
 
     .feature p {
       margin: 0;
-      color: var(--muted);
-      font-size: 15px;
+      color: var(--secondary);
+      font-size: 14px;
       line-height: 1.7;
     }
 
-    footer {
-      display: flex;
-      justify-content: space-between;
-      gap: 20px;
-      padding: 24px max(24px, calc((100vw - 1180px) / 2));
-      border-top: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 13px;
+    .ipad-section { padding: 110px 0; }
+
+    .ipad-panel {
+      display: grid;
+      grid-template-columns: 0.68fr 1.32fr;
+      align-items: center;
+      gap: 64px;
+      overflow: hidden;
+      padding: 64px 0 64px 64px;
+      border-radius: 28px;
+      background: #1d2924;
+      color: #fff;
     }
 
-    @media (max-width: 720px) {
-      .site-header {
-        min-height: 64px;
-        padding: 10px 18px;
-      }
+    .ipad-panel .eyebrow { color: #8acdb4; }
+    .ipad-panel p {
+      margin: 21px 0 0;
+      color: rgba(255, 255, 255, 0.62);
+      font-size: 15px;
+      line-height: 1.75;
+    }
 
-      .brand img {
-        width: 38px;
-        height: 38px;
-        border-radius: 9px;
-      }
+    .ipad-frame {
+      width: 890px;
+      padding: 8px;
+      border-radius: 23px;
+      background: #090b0a;
+      box-shadow: 0 26px 70px rgba(0, 0, 0, 0.3);
+    }
 
-      .hero {
-        min-height: calc(100svh - 112px);
-      }
+    .ipad-frame img { border-radius: 15px; }
 
-      .hero-visual {
-        inset: 64px 0 0;
-        padding: 16px 28px;
-      }
+    .download-section {
+      padding: 100px 0 56px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
 
-      .hero-shot {
-        display: none;
-        width: min(84vw, 390px);
-        border-radius: 40px;
-      }
+    .download-section h2 { max-width: 620px; margin-inline: auto; }
+    .download-copy {
+      max-width: 520px;
+      margin: 20px auto 29px;
+      color: var(--secondary);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .download-section .actions { justify-content: center; }
 
-      .hero-shot:first-child {
-        display: block;
-      }
+    footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      margin-top: 100px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: #888e8a;
+      font-size: 12px;
+      text-align: left;
+    }
 
-      .hero-copy {
-        padding: 28px 20px 30px;
-      }
+    .footer-links { display: flex; gap: 20px; }
+    .footer-links a { text-decoration: none; }
+    .footer-links a:hover { color: var(--text); }
 
-      h1 {
-        font-size: 42px;
-      }
+    :focus-visible {
+      outline: 3px solid rgba(8, 122, 91, 0.35);
+      outline-offset: 3px;
+    }
 
-      .summary {
-        margin: 12px 0 20px;
-        font-size: 16px;
-        line-height: 1.55;
-      }
+    @media (max-width: 980px) {
+      .hero-layout { grid-template-columns: 1fr 1fr; gap: 40px; }
+      .hero-visual { min-height: 560px; }
+      .phone.home { width: 250px; transform: translateX(-36%); }
+      .phone.topic { left: 15px; width: 200px; }
+      .section-head { gap: 40px; }
+      .screen-image { aspect-ratio: 0.55; }
+      .ipad-panel { grid-template-columns: 0.8fr 1.2fr; gap: 40px; padding-left: 48px; }
+    }
 
-      .actions {
-        align-items: flex-start;
-        flex-direction: column;
-      }
+    @media (max-width: 760px) {
+      .container { width: min(100% - 36px, 640px); }
+      .nav { min-height: 68px; }
+      .brand-tagline, .nav-links a:not(.nav-download) { display: none; }
+      .hero { padding: 70px 0 72px; }
+      .hero-layout { grid-template-columns: 1fr; gap: 55px; }
+      .hero-copy { max-width: 610px; }
+      .hero-visual { min-height: 590px; }
+      .phone.home { width: 268px; transform: translateX(-25%); }
+      .phone.topic { left: 8%; width: 215px; }
+      .facts { grid-template-columns: 1fr; }
+      .fact { padding: 18px 0; }
+      .fact + .fact { border-top: 1px solid var(--border); border-left: 0; }
+      .section, .ipad-section { padding: 80px 0; }
+      .section-head { grid-template-columns: 1fr; gap: 22px; margin-bottom: 38px; }
+      .screens { grid-template-columns: 1fr 1fr; }
+      .feature-list { grid-template-columns: 1fr; }
+      .feature, .feature:nth-child(even) { padding: 27px 0; border-left: 0; }
+      .ipad-panel { grid-template-columns: 1fr; gap: 38px; padding: 42px 0 42px 38px; }
+      .ipad-copy { padding-right: 38px; }
+      .ipad-frame { width: 145%; }
+      .download-section { padding-top: 80px; }
+    }
 
-      .install-button {
-        width: 100%;
-      }
-
-      .features {
-        padding: 48px 20px 56px;
-      }
-
-      .features h2 {
-        font-size: 26px;
-      }
-
-      .feature-grid {
-        grid-template-columns: 1fr;
-        gap: 28px;
-      }
-
-      footer {
-        align-items: flex-start;
-        flex-direction: column;
-        padding: 22px 20px;
-      }
+    @media (max-width: 480px) {
+      .container { width: calc(100% - 32px); }
+      h1 { font-size: 45px; }
+      .hero-copy { font-size: 16px; }
+      .actions { align-items: stretch; flex-direction: column; }
+      .button { width: 100%; }
+      .hero-visual { min-height: 480px; border-radius: 22px; }
+      .phone { border-width: 5px; border-radius: 31px; }
+      .phone img { border-radius: 25px; }
+      .phone.home { top: 36px; width: 220px; transform: translateX(-27%); }
+      .phone.topic { top: 100px; left: -2%; width: 175px; }
+      .hero-visual::after { right: 17px; bottom: 16px; }
+      .screens { gap: 10px; }
+      .screen { margin: 0; border-radius: 13px; }
+      .screen figcaption { display: block; padding: 12px; }
+      .screen figcaption strong { font-size: 13px; }
+      .screen figcaption span { display: block; margin-top: 3px; }
+      h2 { font-size: 35px; }
+      .ipad-panel { padding-top: 36px; border-radius: 22px; }
+      .ipad-frame { width: 175%; }
+      footer { align-items: flex-start; flex-direction: column; margin-top: 75px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      html {
-        scroll-behavior: auto;
-      }
-
-      .install-button {
-        transition: none;
-      }
+      html { scroll-behavior: auto; }
+      * { transition: none !important; }
     }
   </style>
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="#top" aria-label="返回顶部">
-      <img src="app-icon.png?v=20260805" alt="">
-      <span>v2Explore</span>
-    </a>
-    <a class="github-link" href="https://github.com/xinghelee/v2ex">GitHub</a>
+    <nav class="nav container" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="v2Explore 首页">
+        <img src="app-icon.png?v=20260805" alt="">
+        <span class="brand-text"><span class="brand-name">v2Explore</span><span class="brand-tagline">Way to Explore</span></span>
+      </a>
+      <div class="nav-links">
+        <a href="#screens">界面</a>
+        <a href="#features">功能</a>
+        <a href="https://github.com/xinghelee/v2ex">GitHub</a>
+        <a class="nav-download" href="https://testflight.apple.com/join/jUBsFk9u">下载</a>
+      </div>
+    </nav>
   </header>
 
   <main id="top">
     <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-visual" aria-label="v2Explore 客户端界面截图">
-        <img class="hero-shot" src="screenshots/home-hd.png" width="1320" height="2868" alt="V2EX 首页" fetchpriority="high">
-        <img class="hero-shot" src="screenshots/topic-hd.png" width="1320" height="2868" alt="V2EX 话题详情">
-        <img class="hero-shot" src="screenshots/nodes-hd.png" width="1320" height="2868" alt="V2EX 节点目录">
-        <img class="hero-shot" src="screenshots/profile-hd.png" width="1320" height="2868" alt="V2EX 个人页面">
-      </div>
-      <div class="hero-copy">
-        <p class="eyebrow">为 iOS 26 设计</p>
-        <h1 id="hero-title">v2Explore</h1>
-        <p class="tagline">Way to Explore</p>
-        <p class="summary">在 iPhone 上浏览社区、关注节点、查看通知与保存内容。使用原生 Liquid Glass 交互，保持快速、清晰和专注。</p>
-        <div class="actions">
-          <a class="install-button" href="https://testflight.apple.com/join/jUBsFk9u">通过 TestFlight 安装 <span aria-hidden="true">→</span></a>
-          <a class="install-button secondary" href="https://github.com/xinghelee/v2ex-android/releases/latest">下载 Android 版 APK <span aria-hidden="true">↓</span></a>
-          <span class="requirement">iOS 26+ ・ Android 8.0+</span>
+      <div class="hero-layout container">
+        <div>
+          <p class="overline">V2EX 的 iPhone 与 iPad 客户端</p>
+          <h1 id="hero-title">更舒服地逛 V2EX。</h1>
+          <p class="hero-copy">v2Explore 使用 SwiftUI 原生构建。浏览话题、查看回复、关注节点、保存内容，常用的功能都在熟悉的位置。</p>
+          <div class="actions">
+            <a class="button primary" href="https://testflight.apple.com/join/jUBsFk9u">通过 TestFlight 安装 <span aria-hidden="true">→</span></a>
+            <a class="button" href="https://github.com/xinghelee/v2ex-android/releases/latest">下载 Android 版</a>
+          </div>
+          <p class="requirement">支持 iOS 18+，在 iOS 26 上使用原生 Liquid Glass</p>
+        </div>
+
+        <div class="hero-visual" aria-label="v2Explore 应用界面预览">
+          <div class="phone topic" aria-hidden="true"><img src="screenshots/topic-hd.png" width="1320" height="2868" alt=""></div>
+          <div class="phone home"><img src="screenshots/home-hd.png" width="1320" height="2868" alt="v2Explore 首页界面"></div>
         </div>
       </div>
     </section>
 
-    <section class="features" aria-labelledby="feature-title">
-      <h2 id="feature-title">为日常社区阅读保留必要的功能</h2>
-      <div class="feature-grid">
-        <article class="feature">
-          <h3>快速浏览</h3>
-          <p>全部、最热、关注和快捷节点自由切换，并分别记忆阅读位置。</p>
-        </article>
-        <article class="feature">
-          <h3>完整讨论</h3>
-          <p>支持正文、图片、代码、楼层回复、只看楼主、收藏与离线阅读。</p>
-        </article>
-        <article class="feature">
-          <h3>数据留在设备</h3>
-          <p>Token 与网页会话保存在系统 Keychain，阅读设置与离线内容存储在本机。</p>
-        </article>
+    <div class="fact-row">
+      <div class="facts container">
+        <div class="fact"><strong>原生体验</strong><span>SwiftUI 构建，遵循系统交互</span></div>
+        <div class="fact"><strong>iPhone 与 iPad</strong><span>针对不同屏幕重新布局</span></div>
+        <div class="fact"><strong>本地优先</strong><span>账号凭证保存在系统 Keychain</span></div>
+      </div>
+    </div>
+
+    <section class="section" id="screens" aria-labelledby="screens-title">
+      <div class="container">
+        <div class="section-head">
+          <div><p class="eyebrow">应用界面</p><h2 id="screens-title">熟悉，但更适合在手机上使用。</h2></div>
+          <p class="section-intro">信息层级和 V2EX 保持一致，操作则按照移动端习惯重新安排。不需要花时间学习一套新的逻辑。</p>
+        </div>
+
+        <div class="screens">
+          <figure class="screen"><div class="screen-image"><img src="screenshots/home-hd.png" width="1320" height="2868" alt="首页话题流"></div><figcaption><strong>首页</strong><span>话题流</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/topic-hd.png" width="1320" height="2868" alt="话题与楼层回复"></div><figcaption><strong>话题</strong><span>正文与回复</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/nodes-hd.png" width="1320" height="2868" alt="节点目录"></div><figcaption><strong>节点</strong><span>查找与关注</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/profile-hd.png" width="1320" height="2868" alt="个人页面"></div><figcaption><strong>我的</strong><span>收藏与设置</span></figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section features-section" id="features" aria-labelledby="features-title">
+      <div class="container">
+        <div class="section-head">
+          <div><p class="eyebrow">日常使用</p><h2 id="features-title">细节不抢眼，用起来会发现。</h2></div>
+          <p class="section-intro">没有单独制造一套“高级功能”。每一项能力都服务于更快地找到内容、更轻松地读完，以及以后还能找回来。</p>
+        </div>
+
+        <div class="feature-list">
+          <article class="feature"><span class="feature-number">01</span><div><h3>多种话题流</h3><p>全部、最热、关注与快捷节点分别记住阅读位置，来回切换不会丢失进度。</p></div></article>
+          <article class="feature"><span class="feature-number">02</span><div><h3>完整的长帖阅读</h3><p>支持图片、代码、引用、只看楼主、楼层跳转和长帖分页。</p></div></article>
+          <article class="feature"><span class="feature-number">03</span><div><h3>收藏与离线</h3><p>收藏夹、标签和备注都保存在本机，也可以把内容下载后再读。</p></div></article>
+          <article class="feature"><span class="feature-number">04</span><div><h3>通知与搜索</h3><p>集中查看回复、@ 和感谢，并通过全文搜索重新找到看过的话题。</p></div></article>
+          <article class="feature"><span class="feature-number">05</span><div><h3>草稿自动保存</h3><p>新话题与回复草稿会持续保留，切换页面或暂时退出也不会丢失。</p></div></article>
+          <article class="feature"><span class="feature-number">06</span><div><h3>凭证留在设备</h3><p>Token 和网页会话存入 Keychain，不会上传到第三方服务器。</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="ipad-section" aria-labelledby="ipad-title">
+      <div class="ipad-panel container">
+        <div class="ipad-copy">
+          <p class="eyebrow">为 iPad 调整</p>
+          <h2 id="ipad-title">不只是把手机界面拉宽。</h2>
+          <p>宽屏下，话题正文与回复使用双栏布局，各自独立滚动。窗口变窄时再自然回到单栏。</p>
+        </div>
+        <div class="ipad-frame"><img src="screenshots/ipad-dual-pane.png" alt="v2Explore iPad 双栏阅读界面"></div>
+      </div>
+    </section>
+
+    <section class="download-section" aria-labelledby="download-title">
+      <div class="container">
+        <p class="eyebrow">开始使用</p>
+        <h2 id="download-title">现在就可以装到手机上。</h2>
+        <p class="download-copy">iOS 版通过 TestFlight 提供，Android 版可直接下载 APK。v2Explore 是非官方客户端，仍在持续更新。</p>
+        <div class="actions">
+          <a class="button primary" href="https://testflight.apple.com/join/jUBsFk9u">安装 iOS 版 <span aria-hidden="true">→</span></a>
+          <a class="button" href="https://github.com/xinghelee/v2ex-android/releases/latest">下载 Android APK</a>
+        </div>
+
+        <footer>
+          <span>© v2Explore · 非 V2EX 官方客户端</span>
+          <div class="footer-links"><a href="privacy.html">隐私</a><a href="terms.html">条款</a><a href="https://github.com/xinghelee/v2ex">GitHub</a></div>
+        </footer>
       </div>
     </section>
   </main>
-
-  <footer>
-    <span>v2Explore</span>
-    <span>非 V2EX 官方客户端</span>
-  </footer>
 </body>
 </html>
