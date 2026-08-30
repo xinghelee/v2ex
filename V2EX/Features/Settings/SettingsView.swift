@@ -170,7 +170,7 @@ struct SettingsView: View {
                                 icon: "checkmark.shield",
                                 iconColor: Theme.accent,
                                 title: "使用条款与社区规范",
-                                subtitle: "零容忍政策、举报与屏蔽说明"
+                                subtitle: "举报、屏蔽与社区规范说明"
                             ) {
                                 Chevron()
                             }
