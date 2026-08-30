@@ -10,6 +10,7 @@ xcuserdata/
 
 # 本项目：命令行构建产物
 .build-dd/
+.build-dev/
 
 # 本地测试文件
 /tmp/
