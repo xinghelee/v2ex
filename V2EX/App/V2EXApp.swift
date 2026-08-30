@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct V2EXApp: App {
+    @State private var showLaunchAnimation = true
     @StateObject private var settings = AppSettings()
     @StateObject private var token = TokenStore()
     @StateObject private var session = V2EXSessionStore()
@@ -20,7 +21,7 @@ struct V2EXApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(isLaunching: $showLaunchAnimation)
                 .environmentObject(settings)
                 .environmentObject(token)
                 .environmentObject(session)
@@ -38,6 +39,14 @@ struct V2EXApp: App {
                 .environmentObject(history)
                 .preferredColorScheme(settings.theme.colorScheme)
                 .tint(Theme.accent)
+                .overlay {
+                    if showLaunchAnimation {
+                        LaunchAnimationView {
+                            showLaunchAnimation = false
+                        }
+                        .ignoresSafeArea()
+                    }
+                }
                 .task(id: spotlightSignature) {
                     await SpotlightIndexer.shared.replace(with: spotlightTopics)
                 }

@@ -50,6 +50,7 @@
 		CC19FE500CF1C1A1BAA2F23D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E880B91771525AA6EC6C96 /* Models.swift */; };
 		D05BE0081792146B09364963 /* TopicViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEFC5A0489A2A4FC9463497B /* TopicViews.swift */; };
 		D46372D9C30049B54BB4352C /* HNClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6120DC3EBE41BB4D50B917F7 /* HNClient.swift */; };
+		D57646694597782B32E7FD2A /* LaunchAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C46495D17D32EB0BB09C97 /* LaunchAnimationView.swift */; };
 		D908B48A4BF7276496007F6F /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87AF26D4D20B392C500B6CB1 /* NotificationsView.swift */; };
 		DFB8FC333605447066D1C8E8 /* iOS26Compat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6675570256F34DED843631BF /* iOS26Compat.swift */; };
 		E15A101C5AB370F0B427E217 /* NodesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4F99BD91F20BA14DD3F15E /* NodesView.swift */; };
@@ -88,6 +89,7 @@
 		816AD882308D6AD186686D63 /* HNDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HNDetailView.swift; sourceTree = "<group>"; };
 		8495078C84D6A758F900CA12 /* AIConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfigurationStore.swift; sourceTree = "<group>"; };
 		87AF26D4D20B392C500B6CB1 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
+		89C46495D17D32EB0BB09C97 /* LaunchAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAnimationView.swift; sourceTree = "<group>"; };
 		8F96F5B8B7B39B4037AC549F /* HNTranslationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HNTranslationCache.swift; sourceTree = "<group>"; };
 		9454B94E936AE000AC35AEB1 /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		952ED920E11A6B7AB4548070 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -179,6 +181,7 @@
 			children = (
 				50B21E0D3A7CFBEE8C6B7BAC /* Components.swift */,
 				6675570256F34DED843631BF /* iOS26Compat.swift */,
+				89C46495D17D32EB0BB09C97 /* LaunchAnimationView.swift */,
 				A0236282A44BC5E3BA8047F6 /* PullToRefresh.swift */,
 				621BA7F6293FA434C5F42BF2 /* Theme.swift */,
 				DEFC5A0489A2A4FC9463497B /* TopicViews.swift */,
@@ -410,6 +413,7 @@
 				1F78C3DC3E570CB4FB4DEB28 /* HTMLContent.swift in Sources */,
 				C18EAE8CEFEE38E38CC3B246 /* HackerNewsView.swift in Sources */,
 				AA82A2ABA2280EE18F23C7C9 /* HomeView.swift in Sources */,
+				D57646694597782B32E7FD2A /* LaunchAnimationView.swift in Sources */,
 				CC19FE500CF1C1A1BAA2F23D /* Models.swift in Sources */,
 				0D8EADE531DACCC9A8FF6E36 /* ModerationSettingsView.swift in Sources */,
 				4DB19D29B806A9D94FA56B50 /* ModerationStore.swift in Sources */,

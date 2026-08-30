@@ -63,6 +63,7 @@ enum Route: Hashable {
 }
 
 struct RootView: View {
+    @Binding private var isLaunching: Bool
     @State private var selection: AppTab = .home
     @State private var paths: [AppTab: NavigationPath] = [:]
     @State private var showCompose = false
@@ -74,7 +75,8 @@ struct RootView: View {
     /// Debug launch helper — lets automation open a topic directly:
     /// `simctl launch booted com.vibe.v2ex -openTopic 1231572`
     /// 或直接落到某个标签：`-tab nodes`。
-    init() {
+    init(isLaunching: Binding<Bool> = .constant(false)) {
+        _isLaunching = isLaunching
         let arguments = ProcessInfo.processInfo.arguments
         if let flag = arguments.firstIndex(of: "-openTopic"),
            flag + 1 < arguments.count,
@@ -140,12 +142,18 @@ struct RootView: View {
         }
         .environmentObject(notifications)
         // UGC 闸门：条款没同意之前，一条用户内容都不给看。
-        .fullScreenCover(isPresented: .constant(!agreement.hasAccepted)) {
+        .fullScreenCover(isPresented: Binding(
+            get: { !isLaunching && !agreement.hasAccepted },
+            set: { _ in }
+        )) {
             AgreementGateView { agreement.accept() }
         }
         .task {
-            await updateChecker.checkForUpdate()
             await moderation.flush()
+        }
+        .task(id: isLaunching) {
+            guard !isLaunching else { return }
+            await updateChecker.checkForUpdate()
         }
         .task(id: token.token) {
             await notifications.refresh(token: token.token)
