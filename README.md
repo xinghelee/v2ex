@@ -27,6 +27,7 @@
 - **个人**：个人资料、话题统计、网页收藏同步、稍后读、我的话题与回复、关键词和用户屏蔽
 - **写作**：多份 Markdown 草稿、节点选择和格式工具栏，新话题与逐帖回复草稿均自动保存
 - **阅读与外观**：五套主题配色、明暗模式、正文字号、行距和等宽字体可调，可记忆阅读进度并自动离线关注节点
+- **系统智能**：iOS 27 设备端讨论摘要；不可用时可由用户配置 OpenAI 兼容 API，另有 Siri/快捷指令与 Spotlight 集成
 - **交互**：原生悬浮标签栏随滚动收起，列表下拉刷新，点击页面空白处收起键盘
 
 ## 技术要点
@@ -37,7 +38,9 @@
 | API 2.0 | Personal Access Token：通知、个人资料、长帖分页、删除通知 |
 | 网页会话 | App 内回复、收藏同步、关注节点同步；Cookie 只存储在 Keychain |
 | sov2ex | 社区全文索引，V2EX 无官方搜索接口 |
-| iOS 26 | 原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起 |
+| iOS 26 | 最低系统版本；原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起 |
+| iOS 27 | Foundation Models 设备端摘要、App Intents/Siri 深链与 Spotlight 语义入口（渐进增强） |
+| AI 回退 | 用户可选配置 DeepSeek、硅基流动、OpenAI 或任意 OpenAI 兼容 API；Key 仅存 Keychain |
 | 渲染 | 自研轻量 HTML 解析（段落/行内/图片提取），替代 NSAttributedString 方案 |
 | 存储 | Keychain（Token）、UserDefaults（设置）、磁盘缓存（离线包） |
 | 内容治理 | 首启条款闸门、举报与屏蔽，命中内容即时且持久地从全部列表移除 |
@@ -56,6 +59,9 @@
 ```bash
 # 修改 project.yml 后重新生成工程（需要 XcodeGen）
 xcodegen generate
+
+# 1.2.0 的 iOS 27 能力需要 Xcode 27；部署目标仍为 iOS 26
+export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 
 # 模拟器
 xcodebuild -project V2EX.xcodeproj -scheme V2EX \

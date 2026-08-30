@@ -48,6 +48,71 @@ final class TopicDetailViewModel: ObservableObject {
         return (topic, rawReplies)
     }
 
+    /// Avoid adding an AI card to one-line questions with little discussion.
+    func shouldOfferSummary(visibleReplyCount: Int) -> Bool {
+        guard let topic else { return false }
+        let body = HTMLText.plain(topic.contentRendered ?? topic.content ?? "")
+        return body.count >= 600 || visibleReplyCount >= 5 || !appends.isEmpty
+    }
+
+    /// Bounded plain text sent to the on-device model when the user requests a
+    /// summary. Keep both the opening and the newest replies on very long
+    /// threads so the result captures the premise as well as the outcome.
+    /// `visibleReplies` has already passed through ModerationStore, preventing
+    /// blocked or reported content from resurfacing inside a generated summary.
+    func summarySource(from visibleReplies: [ThreadedReply]) -> String {
+        guard let topic else { return "" }
+        var sections = ["标题：\(topic.title)"]
+
+        let body = HTMLText.plain(topic.contentRendered ?? topic.content ?? "")
+        if !body.isEmpty { sections.append("正文：\(Self.clipped(body, limit: 4_000))") }
+
+        for append in appends {
+            let text = HTMLText.plain(append.content)
+            if !text.isEmpty {
+                sections.append("楼主补充 \(append.index)：\(Self.clipped(text, limit: 1_000))")
+            }
+        }
+
+        let selected: [ThreadedReply]
+        if visibleReplies.count <= 32 {
+            selected = visibleReplies
+        } else {
+            selected = Array(visibleReplies.prefix(16)) + Array(visibleReplies.suffix(16))
+        }
+        let repliesText = selected.map { item in
+            let reply = item.reply
+            let text = HTMLText.plain(reply.contentRendered ?? reply.content)
+            return "#\(item.floor) \(reply.member?.username ?? "匿名")：\(Self.clipped(text, limit: 360))"
+        }
+        if !repliesText.isEmpty { sections.append("回复：\n" + repliesText.joined(separator: "\n")) }
+
+        return Self.clipped(sections.joined(separator: "\n\n"), limit: 12_000)
+    }
+
+    /// Stable across launches, unlike Swift's randomized `Hasher` output.
+    func summarySignature(for source: String, visibleReplyCount: Int) -> String {
+        guard let topic else { return "topic-unknown" }
+        return [
+            String(topic.id),
+            String(topic.lastTouched ?? topic.created ?? 0),
+            String(visibleReplyCount),
+            String(appends.count),
+            String(Self.stableChecksum(source), radix: 16),
+        ].joined(separator: "-")
+    }
+
+    private static func stableChecksum(_ text: String) -> UInt64 {
+        text.utf8.reduce(1_469_598_103_934_665_603) { hash, byte in
+            (hash ^ UInt64(byte)) &* 1_099_511_628_211
+        }
+    }
+
+    private static func clipped(_ text: String, limit: Int) -> String {
+        guard text.count > limit else { return text }
+        return String(text.prefix(limit)) + "…"
+    }
+
     func load(
         id: Int,
         token: String,

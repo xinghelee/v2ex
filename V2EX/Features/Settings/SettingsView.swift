@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var token: TokenStore
     @EnvironmentObject private var session: V2EXSessionStore
+    @EnvironmentObject private var aiConfiguration: AIConfigurationStore
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openURL) private var openURL
 
@@ -89,6 +90,23 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 0) {
+                    GroupHeader(title: "AI 摘要")
+                    CardSection {
+                        NavigationLink(value: Route.aiConfiguration) {
+                            SettingsRow(
+                                icon: "sparkles",
+                                iconColor: Theme.accent,
+                                title: "自定义 AI API",
+                                subtitle: aiConfiguration.isConfigured
+                                    ? "已配置 · \(aiConfiguration.providerName ?? aiConfiguration.model)"
+                                    : "Apple Intelligence 不可用时作为回退"
+                            ) { Chevron() }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 0) {
                     GroupHeader(title: "实验性功能")
                     CardSection {
                         HStack(spacing: 14) {
@@ -167,7 +185,7 @@ struct SettingsView: View {
                                 icon: "lock.shield",
                                 iconColor: Theme.accent,
                                 title: "隐私政策",
-                                subtitle: "本 App 不收集任何个人数据"
+                                subtitle: "外部 AI 仅在用户配置并主动生成时调用"
                             ) {
                                 Chevron()
                             }
@@ -237,6 +255,189 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.large)
         // 设置是一条向下钻的支线，底部标签栏留着只会诱人半路跳走。
         .toolbar(.hidden, for: .tabBar)
+    }
+}
+
+struct AIConfigurationView: View {
+    private enum Preset: String, CaseIterable, Identifiable {
+        case deepSeek, siliconFlow, openAI, custom
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .deepSeek: return "DeepSeek"
+            case .siliconFlow: return "硅基流动"
+            case .openAI: return "OpenAI"
+            case .custom: return "自定义"
+            }
+        }
+
+        var baseURL: String? {
+            switch self {
+            case .deepSeek: return "https://api.deepseek.com/v1"
+            case .siliconFlow: return "https://api.siliconflow.cn/v1"
+            case .openAI: return "https://api.openai.com/v1"
+            case .custom: return nil
+            }
+        }
+
+        var model: String? {
+            switch self {
+            case .deepSeek: return "deepseek-chat"
+            case .siliconFlow: return "Qwen/Qwen3-8B"
+            case .openAI: return "gpt-4.1-mini"
+            case .custom: return nil
+            }
+        }
+    }
+
+    @EnvironmentObject private var configuration: AIConfigurationStore
+
+    @State private var preset: Preset = .deepSeek
+    @State private var apiKey = ""
+    @State private var baseURL = ""
+    @State private var model = ""
+    @State private var statusMessage: String?
+    @State private var saved = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                CardSection(padding: 16) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("OpenAI 兼容 API")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Theme.ink)
+                            Text("Apple Intelligence 不可用时，摘要请求会发送到你配置的服务。API Key 只保存在系统钥匙串。")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Theme.muted)
+                                .lineSpacing(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Picker("服务商", selection: $preset) {
+                            ForEach(Preset.allCases) { item in
+                                Text(item.title).tag(item)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: preset) { _, value in
+                            guard value != .custom else { return }
+                            baseURL = value.baseURL ?? baseURL
+                            model = value.model ?? model
+                        }
+
+                        fieldLabel("API Key")
+                        SecureField("sk-…", text: $apiKey)
+                            .font(.system(size: 14, design: .monospaced))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textContentType(.password)
+                            .inputFieldStyle()
+
+                        fieldLabel("API Base URL")
+                        TextField("https://api.example.com/v1", text: $baseURL)
+                            .font(.system(size: 14, design: .monospaced))
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .inputFieldStyle()
+
+                        fieldLabel("模型")
+                        TextField("model-name", text: $model)
+                            .font(.system(size: 14, design: .monospaced))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .inputFieldStyle()
+
+                        HStack(spacing: 12) {
+                            Button {
+                                save()
+                            } label: {
+                                Label(saved ? "已保存" : "保存配置", systemImage: saved ? "checkmark" : "key")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Theme.accent)
+
+                            if configuration.isConfigured {
+                                Button("清除", role: .destructive) {
+                                    configuration.clear()
+                                    apiKey = ""
+                                    saved = false
+                                    statusMessage = "已清除 API Key"
+                                }
+                                .font(.system(size: 14))
+                            }
+                        }
+
+                        if let statusMessage {
+                            Text(statusMessage)
+                                .font(.system(size: 12))
+                                .foregroundStyle(saved ? Theme.accent : Theme.unreadDot)
+                        }
+                    }
+                }
+
+                CardSection(padding: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("隐私提醒", systemImage: "lock.shield")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                        Text("使用外部 API 时，当前话题正文和部分回复会发送给所选服务商。请确认你接受该服务商的隐私政策与费用规则。V2EX 登录信息、Token 和 Cookie 不会发送。")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.muted)
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.canvas)
+        .navigationTitle("自定义 AI API")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .onAppear { load() }
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.muted)
+    }
+
+    private func load() {
+        apiKey = configuration.apiKey
+        baseURL = configuration.baseURL
+        model = configuration.model
+        if baseURL.contains("deepseek") { preset = .deepSeek }
+        else if baseURL.contains("siliconflow") { preset = .siliconFlow }
+        else if baseURL.contains("openai") { preset = .openAI }
+        else { preset = .custom }
+    }
+
+    private func save() {
+        do {
+            try configuration.save(apiKey: apiKey, baseURL: baseURL, model: model)
+            saved = true
+            statusMessage = "已保存，设备端模型不可用时会自动使用 \(configuration.providerName ?? model)"
+        } catch {
+            saved = false
+            statusMessage = error.localizedDescription
+        }
+    }
+}
+
+private extension View {
+    func inputFieldStyle() -> some View {
+        self
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(Theme.inset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

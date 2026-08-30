@@ -71,6 +71,8 @@ final class SearchViewModel: ObservableObject {
 }
 
 struct SearchView: View {
+    let request: SearchOpenRequest
+
     @StateObject private var model = SearchViewModel()
     @EnvironmentObject private var recents: RecentSearchStore
     @EnvironmentObject private var moderation: ModerationStore
@@ -99,7 +101,16 @@ struct SearchView: View {
                 }
             }
             .onAppear {
+                guard request.query == nil else { return }
                 DispatchQueue.main.async { searchFocused = true }
+            }
+            .task(id: request.id) {
+                guard let query = request.query?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !query.isEmpty else { return }
+                model.query = query
+                recents.record(query)
+                searchFocused = false
+                await model.run()
             }
             .sheet(item: $reportTarget) { ReportSheet(target: $0) }
     }

@@ -100,6 +100,7 @@ final class HomeViewModel: ObservableObject {
 }
 
 struct HomeView: View {
+    let request: HomeOpenRequest
     var onCompose: () -> Void
 
     @StateObject private var model = HomeViewModel()
@@ -111,8 +112,6 @@ struct HomeView: View {
 
     /// Per-feed scroll offsets, so swiping between categories doesn't lose your place.
     @State private var scrollPositions: [HomeViewModel.Feed: ScrollPosition] = [:]
-    /// 只在首次出现时加载默认分类；从详情页返回时不再重置分类选择。
-    @State private var hasLoadedInitial = false
 
     private var feeds: [HomeViewModel.Feed] {
         [.all, .hot, .following] + followed.names.prefix(8).map {
@@ -146,10 +145,14 @@ struct HomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
         .safeAreaBar(edge: .top, spacing: 0) { feedFilterBar }
-        .task {
-            guard !hasLoadedInitial else { return }
-            hasLoadedInitial = true
-            await model.load(feed: .all, followedNodes: followed.names)
+        .task(id: request.id) {
+            if model.feed == request.feed {
+                await model.load(feed: request.feed, followedNodes: followed.names)
+            } else {
+                // `onChange` owns the load after switching feeds, avoiding a
+                // duplicate request when Siri opens 今日最热.
+                model.feed = request.feed
+            }
         }
         .onChange(of: model.feed) { _, newFeed in
             Task { await model.load(feed: newFeed, followedNodes: followed.names) }

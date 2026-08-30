@@ -14,8 +14,8 @@ settings:
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "99LYH6FNPS"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "14"
+    MARKETING_VERSION: "1.2.0"
+    CURRENT_PROJECT_VERSION: "15"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
 # Xcode Cloud 要求共享 scheme(提交到仓库的 xcshareddata/xcschemes),
