@@ -112,6 +112,8 @@ struct HomeView: View {
 
     /// Per-feed scroll offsets, so swiping between categories doesn't lose your place.
     @State private var scrollPositions: [HomeViewModel.Feed: ScrollPosition] = [:]
+    /// 正在被长按拖起的分类 chip（用于关注节点排序）。
+    @State private var draggedFeed: HomeViewModel.Feed?
 
     private var feeds: [HomeViewModel.Feed] {
         [.all, .hot, .following] + followed.names.prefix(8).map {
@@ -175,8 +177,41 @@ struct HomeView: View {
                 model.feed = feed
             }
             .id(feed)
+            // 长按关注节点 chip 可拖动排序（固定项「全部/最热/关注」
+            // 不可拖，但可以作为落点参照）。顺序写回 followed.names 并持久化。
+            // preview 自定义为胶囊：glassEffect 视图的拖拽快照会丢圆角变方形。
+            .onDrag {
+                guard feed.isReorderable else { return NSItemProvider() }
+                draggedFeed = feed
+                return NSItemProvider(object: feed.title as NSString)
+            } preview: {
+                Text(feed.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(Theme.accent))
+            }
+            .onDrop(of: [.text], delegate: FeedChipDropDelegate(
+                target: feed,
+                dragged: draggedFeed,
+                onMove: moveFeed
+            ))
         }
         .readableColumn()
+    }
+
+    /// 把被拖起的节点 chip 插到目标 chip 的位置。只处理节点对节点；
+    /// 拖到固定项上由 delegate 直接忽略。
+    private func moveFeed(to target: HomeViewModel.Feed) {
+        guard let dragged = draggedFeed, dragged != target else { return }
+        guard case .node(let draggedName, _) = dragged,
+              case .node(let targetName, _) = target else { return }
+        guard let from = followed.names.firstIndex(of: draggedName),
+              let to = followed.names.firstIndex(of: targetName), from != to else { return }
+        withAnimation(.snappy(duration: 0.25)) {
+            followed.move(from: IndexSet(integer: from), to: to)
+        }
     }
 
     @ViewBuilder
@@ -252,4 +287,31 @@ struct HomeView: View {
             set: { scrollPositions[feed] = $0 }
         )
     }
+}
+
+extension HomeViewModel.Feed {
+    /// 固定项（全部/最热/关注/HN）不可拖，只有关注节点参与排序。
+    var isReorderable: Bool {
+        if case .node = self { return true }
+        return false
+    }
+}
+
+/// 首页分类 chip 的拖动落点：被拖起的节点 chip 进入某个可排序 chip 时，
+/// 把它插到目标 chip 的位置（由 onMove 执行）。固定项作为落点时直接忽略。
+private struct FeedChipDropDelegate: DropDelegate {
+    let target: HomeViewModel.Feed
+    let dragged: HomeViewModel.Feed?
+    let onMove: (HomeViewModel.Feed) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged, dragged != target, target.isReorderable else { return }
+        onMove(target)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool { true }
 }
