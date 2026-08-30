@@ -150,32 +150,12 @@ struct SettingsView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 8)
-                            Toggle("", isOn: $settings.hackerNewsEnabled).labelsHidden()
+                            Toggle("", isOn: $settings.hackerNewsEnabled)
+                                .labelsHidden()
+                                .accessibilityLabel("启用 Hacker News")
                         }
                         .padding(.horizontal, Theme.Metric.cardPadding)
                         .padding(.vertical, 10)
-
-                        if settings.hackerNewsEnabled {
-                            RowSeparator(leadingInset: 54)
-                            HStack(spacing: 14) {
-                                Color.clear.frame(width: 22)
-                                Text("入口位置")
-                                    .font(.system(size: 17))
-                                    .kerning(-0.43)
-                                    .foregroundStyle(Theme.ink)
-                                Spacer(minLength: 8)
-                                Picker("", selection: $settings.hackerNewsPlacement) {
-                                    ForEach(HackerNewsPlacement.allCases) { placement in
-                                        Text(placement.title).tag(placement)
-                                    }
-                                }
-                                .labelsHidden()
-                                .pickerStyle(.segmented)
-                                .frame(width: 190)
-                            }
-                            .padding(.horizontal, Theme.Metric.cardPadding)
-                            .padding(.vertical, 10)
-                        }
                     }
 
                     Text("这里的功能可能不稳定，也可能在后续版本中移除。")

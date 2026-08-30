@@ -37,8 +37,6 @@ struct ProfileView: View {
     @EnvironmentObject private var radar: RadarStore
     @EnvironmentObject private var moderation: ModerationStore
     @EnvironmentObject private var history: HistoryStore
-    @EnvironmentObject private var settings: AppSettings
-    @EnvironmentObject private var followed: FollowedNodesStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var metricColumns: [GridItem] {
@@ -300,16 +298,6 @@ struct ProfileView: View {
                 )
                 RowSeparator(leadingInset: 54)
 
-                if nodesTabDisplaced {
-                    utilityRow(
-                        icon: "square.grid.2x2",
-                        title: "节点目录",
-                        subtitle: "已关注 \(followed.names.count) 个节点",
-                        route: .nodeCatalog
-                    )
-                    RowSeparator(leadingInset: 54)
-                }
-
                 utilityRow(
                     icon: "checkmark.shield",
                     title: "内容与屏蔽",
@@ -318,10 +306,6 @@ struct ProfileView: View {
                 )
             }
         }
-    }
-
-    private var nodesTabDisplaced: Bool {
-        settings.hackerNewsEnabled && settings.hackerNewsPlacement == .tab
     }
 
     private func utilityRow(icon: String, title: String, subtitle: String, route: Route) -> some View {

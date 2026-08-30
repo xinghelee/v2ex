@@ -125,12 +125,7 @@ struct HomeView: View {
     private var feeds: [HomeViewModel.Feed] {
         [.all, .hot, .following] + followed.names.prefix(8).map {
             .node(name: $0, title: NodeCatalog.displayName(for: $0))
-        } + (showsHackerNewsChip ? [.hackerNews] : [])
-    }
-
-    /// 放进底部标签时就不再占分类条，否则同一个页面会有两个入口。
-    private var showsHackerNewsChip: Bool {
-        settings.hackerNewsEnabled && settings.hackerNewsPlacement == .feed
+        } + (settings.hackerNewsEnabled ? [.hackerNews] : [])
     }
 
     private var visibleTopics: [V2Topic] {

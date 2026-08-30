@@ -26,6 +26,8 @@ struct TopicDetailView: View {
     @State private var showShareCard = false
     @State private var showShareLink = false
     @State private var reportTarget: ModerationTarget?
+    @State private var highlightedReplyID: Int?
+    @State private var highlightClearTask: Task<Void, Never>?
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -144,7 +146,7 @@ struct TopicDetailView: View {
                         }
                         replyHeader(topic)
                         discussionTrack(proxy)
-                        replyList
+                        replyList(proxy)
                     } else if model.isLoading {
                         LoadingCard().padding(.top, 8)
                     } else if let message = model.errorMessage {
@@ -218,7 +220,7 @@ struct TopicDetailView: View {
                         if let topic = model.topic {
                             replyHeader(topic)
                             discussionTrack(proxy)
-                            replyList
+                            replyList(proxy)
                         }
                     }
                     .readableColumn(maxWidth: 640)
@@ -614,7 +616,7 @@ struct TopicDetailView: View {
     }
 
     @ViewBuilder
-    private var replyList: some View {
+    private func replyList(_ proxy: ScrollViewProxy) -> some View {
         let items = moderation.visible(model.visibleReplies)
         if items.isEmpty {
             if model.isLoading {
@@ -674,6 +676,9 @@ struct TopicDetailView: View {
                             replyDrafts.update(mention, for: topicID)
                             composerFocused = true
                         },
+                        onQuoteTap: { floor in
+                            jumpToQuotedReply(floor: floor, proxy: proxy)
+                        },
                         onReport: { reportTarget = $0 }
                     )
                         .id(item.id)
@@ -686,7 +691,8 @@ struct TopicDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.card)
+                .background(highlightedReplyID == item.id ? Theme.accentSoft : Theme.card)
+                .animation(.easeOut(duration: 0.22), value: highlightedReplyID)
                 .clipShape(
                     UnevenRoundedRectangle(
                         topLeadingRadius: index == 0 ? Theme.Metric.cardRadius : 0,
@@ -707,6 +713,43 @@ struct TopicDetailView: View {
                     .foregroundStyle(Theme.faint)
                     .padding(.horizontal, Theme.Metric.headerPadding)
                     .padding(.top, 8)
+            }
+        }
+    }
+
+    /// Quote cards carry the resolved floor number. Reveal that row even when
+    /// "只看楼主" is active, then briefly tint it so the destination is clear.
+    private func jumpToQuotedReply(floor: Int, proxy: ScrollViewProxy) {
+        let visibleReplies = moderation.visible(model.replies)
+        guard let target = visibleReplies.first(where: { $0.floor == floor }) else { return }
+
+        if model.filter == .authorOnly, !target.isAuthor {
+            model.filter = .byFloor
+        }
+
+        highlightClearTask?.cancel()
+        withAnimation(.easeOut(duration: 0.18)) {
+            highlightedReplyID = target.id
+        }
+
+        // Changing the filter materializes previously hidden rows on the next
+        // update cycle, so defer the scroll by one turn of the main actor.
+        Task { @MainActor in
+            await Task.yield()
+            if reduceMotion {
+                proxy.scrollTo(target.id, anchor: .center)
+            } else {
+                withAnimation(.snappy(duration: 0.3)) {
+                    proxy.scrollTo(target.id, anchor: .center)
+                }
+            }
+        }
+
+        highlightClearTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled, highlightedReplyID == target.id else { return }
+            withAnimation(.easeIn(duration: 0.3)) {
+                highlightedReplyID = nil
             }
         }
     }
@@ -926,6 +969,7 @@ struct ReplyRow: View {
     var topicID: Int = 0
     var isPro = false
     var onReply: ((String) -> Void)? = nil
+    var onQuoteTap: ((Int) -> Void)? = nil
     var onReport: ((ModerationTarget) -> Void)? = nil
     @EnvironmentObject private var settings: AppSettings
 
@@ -1031,7 +1075,23 @@ struct ReplyRow: View {
     }
 
     /// The design's fold-quote: accent rule, author + floor, one-line excerpt.
+    @ViewBuilder
     private func quoteBlock(_ quoted: ThreadedReply.QuotedReply) -> some View {
+        if let floor = quoted.floor, let onQuoteTap {
+            Button {
+                onQuoteTap(floor)
+            } label: {
+                quoteBlockContent(quoted)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("跳到 \(quoted.username) 的第 \(floor) 楼回复")
+        } else {
+            quoteBlockContent(quoted)
+        }
+    }
+
+    private func quoteBlockContent(_ quoted: ThreadedReply.QuotedReply) -> some View {
         HStack(alignment: .top, spacing: 10) {
             RoundedRectangle(cornerRadius: 1.5)
                 .fill(Theme.accent.opacity(0.35))
@@ -1047,6 +1107,13 @@ struct ReplyRow: View {
                         .foregroundStyle(Theme.muted)
                         .lineLimit(2)
                 }
+            }
+            Spacer(minLength: 0)
+            if quoted.floor != nil, onQuoteTap != nil {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.top, 2)
             }
         }
         .padding(.vertical, 2)
