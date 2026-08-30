@@ -127,7 +127,7 @@ struct NotificationsView: View {
                 .disabled(model.unreadCount == 0)
             }
         }
-        .safeAreaBar(edge: .top, spacing: 0) { scopePicker }
+        .topSafeAreaBar(spacing: 0) { scopePicker }
         .task { await model.refresh(token: token.token) }
     }
 

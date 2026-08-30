@@ -112,7 +112,7 @@ struct RootView: View {
                 .environment(\.openURL, memberLinkAction(for: .search))
             }
         }
-        .tabBarMinimizeBehavior(.never)
+        .keepTabBarExpanded()
         .fullScreenCover(isPresented: $showCompose) {
             ComposeView { newTopicID in
                 // 发完直接落到自己的帖子上，省得再去首页找。

@@ -269,7 +269,7 @@ struct TopicDetailView: View {
                             .padding(.leading, 6)
                             .padding(.trailing, 11)
                             .padding(.vertical, 6)
-                            .glassEffect(.regular.interactive(), in: .capsule)
+                            .glassPill()
                         }
                         .buttonStyle(.plain)
                     }
@@ -633,7 +633,7 @@ struct TopicDetailView: View {
     }
 
     /// Floating Liquid Glass composer. The field and the send button live in one
-    /// GlassEffectContainer so their glass blends instead of stacking.
+    /// GlassContainer (GlassEffectContainer on iOS 26) so their glass blends instead of stacking.
     /// 已登录（网页会话）时直接在 app 内输入并发送；未登录时跳网页版。
     private var composerBar: some View {
         HStack(alignment: .bottom, spacing: 12) {
@@ -646,7 +646,7 @@ struct TopicDetailView: View {
                 .padding(.leading, 18)
                 .padding(.trailing, 12)
                 .padding(.vertical, 14)
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .glassPill()
 
             Button {
                 Task { await sendReply() }
@@ -655,7 +655,7 @@ struct TopicDetailView: View {
                     .font(.system(size: 15, weight: .bold))
                     .frame(width: 22, height: 22)
             }
-            .buttonStyle(.glassProminent)
+            .prominentGlassButtonStyle()
             .buttonBorderShape(.circle)
             .controlSize(.large)
             .tint(Theme.accent)
@@ -669,7 +669,7 @@ struct TopicDetailView: View {
     }
 
     private var replyComposer: some View {
-        GlassEffectContainer(spacing: 12) {
+        GlassContainer(spacing: 12) {
             if session.isLoggedIn {
                 VStack(alignment: .leading, spacing: 8) {
                     mentionSuggestions
@@ -685,7 +685,7 @@ struct TopicDetailView: View {
                         .padding(.leading, 18)
                         .padding(.trailing, 12)
                         .padding(.vertical, 14)
-                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .glassPill()
                         .onTapGesture {
                             // API 2.0 has no reply endpoint — hand off to the web composer.
                             openURL(URL(string: "https://www.v2ex.com/t/\(topicID)#reply")!)
@@ -698,7 +698,7 @@ struct TopicDetailView: View {
                             .font(.system(size: 15, weight: .bold))
                             .frame(width: 22, height: 22)
                     }
-                    .buttonStyle(.glassProminent)
+                    .prominentGlassButtonStyle()
                     .buttonBorderShape(.circle)
                     .controlSize(.large)
                     .tint(Theme.accent)

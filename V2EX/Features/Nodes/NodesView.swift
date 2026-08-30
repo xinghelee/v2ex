@@ -96,7 +96,7 @@ struct NodesView: View {
             .padding(.bottom, 12)
         }
         .scrollIndicators(.hidden)
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .softBottomEdgeEffect()
         .scrollDismissesKeyboard(.immediately)
     }
 

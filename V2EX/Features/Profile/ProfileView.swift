@@ -68,7 +68,7 @@ struct ProfileView: View {
             .padding(.bottom, 12)
         }
         .scrollIndicators(.hidden)
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .softBottomEdgeEffect()
         .pullToRefresh { await model.load(token: token.token) }
         .background(Theme.canvas)
         .navigationTitle("我的")

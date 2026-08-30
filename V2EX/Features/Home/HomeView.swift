@@ -145,7 +145,7 @@ struct HomeView: View {
         .navigationTitle("V2EX")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
-        .safeAreaBar(edge: .top, spacing: 0) { feedFilterBar }
+        .topSafeAreaBar(spacing: 0) { feedFilterBar }
         .task {
             guard !hasLoadedInitial else { return }
             hasLoadedInitial = true
@@ -235,7 +235,7 @@ struct HomeView: View {
             .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .softBottomEdgeEffect()
         .pullToRefresh(isEnabled: model.feed == feed) {
             await model.load(feed: feed, followedNodes: followed.names, force: true)
         }

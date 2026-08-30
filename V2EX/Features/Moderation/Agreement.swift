@@ -153,7 +153,7 @@ struct AgreementGateView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
                 }
-                .buttonStyle(.glassProminent)
+                .prominentGlassButtonStyle()
                 .buttonBorderShape(.roundedRectangle(radius: 16))
                 .tint(Theme.accent)
 
