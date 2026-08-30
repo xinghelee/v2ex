@@ -95,6 +95,18 @@ struct TopicDetailView: View {
                         hiddenTopicCard
                     } else if let topic = model.topic {
                         topicCard(topic)
+                        let summaryReplies = moderation.visible(model.replies)
+                        if model.shouldOfferSummary(visibleReplyCount: summaryReplies.count) {
+                            let source = model.summarySource(from: summaryReplies)
+                            TopicAISummaryCard(
+                                topicID: topic.id,
+                                source: source,
+                                signature: model.summarySignature(
+                                    for: source,
+                                    visibleReplyCount: summaryReplies.count
+                                )
+                            )
+                        }
                         replyHeader(topic)
                         replyList
                     } else if model.isLoading {
@@ -129,6 +141,18 @@ struct TopicDetailView: View {
                         hiddenTopicCard
                     } else if let topic = model.topic {
                         topicCard(topic)
+                        let summaryReplies = moderation.visible(model.replies)
+                        if model.shouldOfferSummary(visibleReplyCount: summaryReplies.count) {
+                            let source = model.summarySource(from: summaryReplies)
+                            TopicAISummaryCard(
+                                topicID: topic.id,
+                                source: source,
+                                signature: model.summarySignature(
+                                    for: source,
+                                    visibleReplyCount: summaryReplies.count
+                                )
+                            )
+                        }
                     } else if model.isLoading {
                         LoadingCard().padding(.top, 8)
                     } else if let message = model.errorMessage {

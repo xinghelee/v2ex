@@ -1,4 +1,6 @@
-# V2EX
+# v2Explore
+
+> Way to Explore
 
 面向个人使用的 V2EX iOS 客户端，支持 **iPhone 与 iPad**。使用 SwiftUI 构建，采用 iOS 26 原生 Liquid Glass 组件，数据来自 V2EX API、网页会话和 sov2ex 搜索。iPad 上列表与正文收窄为居中的可读栏宽，横竖屏均可使用。
 
@@ -27,6 +29,7 @@
 - **个人**：个人资料、话题统计、网页收藏同步、稍后读、我的话题与回复、关键词和用户屏蔽
 - **写作**：多份 Markdown 草稿、节点选择和格式工具栏，新话题与逐帖回复草稿均自动保存
 - **阅读与外观**：五套主题配色、明暗模式、正文字号、行距和等宽字体可调，可记忆阅读进度并自动离线关注节点
+- **系统智能**：iOS 27 设备端讨论摘要；不可用时可由用户配置 OpenAI 兼容 API，另有 Siri/快捷指令与 Spotlight 集成
 - **交互**：原生悬浮标签栏随滚动收起，列表下拉刷新，点击页面空白处收起键盘
 
 ## 技术要点
@@ -38,6 +41,8 @@
 | 网页会话 | App 内回复、收藏同步、关注节点同步；Cookie 只存储在 Keychain |
 | sov2ex | 社区全文索引，V2EX 无官方搜索接口 |
 | iOS 26 | 原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起 |
+| iOS 27 | Foundation Models 设备端摘要、App Intents/Siri 深链与 Spotlight 语义入口（渐进增强） |
+| AI 回退 | 用户可选配置 DeepSeek、硅基流动、OpenAI 或任意 OpenAI 兼容 API；Key 仅存 Keychain |
 | 多设备 | iPhone 竖屏、iPad 全方向；宽屏内容自动居中为 720pt 可读栏 |
 | iPad 双栏 | 宽屏（横屏/大窗）话题详情正文与楼层回复左右分栏、各自独立滚动 |
 | 渲染 | 自研轻量 HTML 解析（段落/行内/图片提取），替代 NSAttributedString 方案 |
@@ -58,6 +63,9 @@
 ```bash
 # 修改 project.yml 后重新生成工程（需要 XcodeGen）
 xcodegen generate
+
+# 1.2.0 的 iOS 27 能力需要 Xcode 27；部署目标仍为 iOS 26
+export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 
 # 模拟器
 xcodebuild -project V2EX.xcodeproj -scheme V2EX \

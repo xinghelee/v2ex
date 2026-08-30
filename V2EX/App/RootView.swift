@@ -1,4 +1,15 @@
+import CoreSpotlight
 import SwiftUI
+
+struct HomeOpenRequest: Equatable {
+    let id = UUID()
+    let feed: HomeViewModel.Feed
+}
+
+struct SearchOpenRequest: Equatable {
+    let id = UUID()
+    let query: String?
+}
 
 enum AppTab: Int, CaseIterable, Identifiable {
     case home, nodes, notifications, profile, search, hackerNews
@@ -46,6 +57,7 @@ enum Route: Hashable {
     case settings
     case appearance
     case reading
+    case aiConfiguration
     case tokenSetup
     case v2exLogin
 }
@@ -54,6 +66,8 @@ struct RootView: View {
     @State private var selection: AppTab = .home
     @State private var paths: [AppTab: NavigationPath] = [:]
     @State private var showCompose = false
+    @State private var homeRequest = HomeOpenRequest(feed: .all)
+    @State private var searchRequest = SearchOpenRequest(query: nil)
     @StateObject private var updateChecker = UpdateChecker()
     @StateObject private var autoOffline = AutoOfflineCoordinator()
 
@@ -104,7 +118,7 @@ struct RootView: View {
 
             Tab("搜索", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 NavigationStack(path: binding(for: .search)) {
-                    SearchView()
+                    SearchView(request: searchRequest)
                         .navigationDestination(for: Route.self) { route in
                             destination(route)
                         }
@@ -148,6 +162,13 @@ struct RootView: View {
             guard phase == .active else { return }
             Task { await syncAutomaticOffline() }
             Task { await moderation.flush() }
+        }
+        .onOpenURL(perform: handleDeepLink)
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                  identifier.hasPrefix("topic-"),
+                  let id = Int(identifier.dropFirst("topic-".count)) else { return }
+            openTopic(id)
         }
         .background {
             KeyboardDismissTapCapture()
@@ -228,7 +249,7 @@ struct RootView: View {
     private func screen(for tab: AppTab) -> some View {
         switch tab {
         case .home:
-            HomeView(onCompose: { showCompose = true })
+            HomeView(request: homeRequest, onCompose: { showCompose = true })
         case .nodes:
             NodesView()
         case .notifications:
@@ -236,13 +257,55 @@ struct RootView: View {
         case .profile:
             ProfileView()
         case .search:
-            SearchView()
+            SearchView(request: searchRequest)
         case .hackerNews:
             HackerNewsView()
                 .background(Theme.canvas)
                 .navigationTitle("Hacker News")
                 .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "v2ex" else { return }
+        let host = url.host()?.lowercased() ?? ""
+        let path = url.pathComponents.filter { $0 != "/" }
+
+        switch host {
+        case "home":
+            selection = .home
+            paths[.home] = NavigationPath()
+            let feed: HomeViewModel.Feed = path.first == "hot" ? .hot : .all
+            homeRequest = HomeOpenRequest(feed: feed)
+        case "search":
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "q" })?.value
+            selection = .search
+            paths[.search] = NavigationPath()
+            searchRequest = SearchOpenRequest(query: query)
+        case "favorites":
+            selection = .profile
+            var path = NavigationPath()
+            path.append(Route.favorites)
+            paths[.profile] = path
+        case "topic":
+            if let value = path.first, let id = Int(value) { openTopic(id) }
+        case "node":
+            guard let name = path.first, !name.isEmpty else { return }
+            selection = .home
+            var route = NavigationPath()
+            route.append(Route.node(name))
+            paths[.home] = route
+        default:
+            break
+        }
+    }
+
+    private func openTopic(_ id: Int) {
+        selection = .home
+        var path = NavigationPath()
+        path.append(Route.topic(id))
+        paths[.home] = path
     }
 
     @ViewBuilder
@@ -262,6 +325,7 @@ struct RootView: View {
         case .settings: SettingsView()
         case .appearance: AppearanceSettingsView()
         case .reading: ReadingSettingsView()
+        case .aiConfiguration: AIConfigurationView()
         case .tokenSetup: TokenSetupView()
         case .v2exLogin: V2EXLoginView()
         }

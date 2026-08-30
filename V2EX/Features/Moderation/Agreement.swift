@@ -18,34 +18,35 @@ enum Agreement {
     }
 
     static let intro = """
-    V2EX Way to explore 是 v2ex.com 的第三方阅读客户端，由独立开发者开发，与 V2EX 官方无从属关系。\
+    v2Explore · Way to Explore 是 v2ex.com 的第三方阅读客户端，由独立开发者开发，与 V2EX 官方无从属关系。\
     App 内显示的话题与回复均由 V2EX 用户发布，不代表本 App 的立场。
     """
 
     static let sections: [Section] = [
         Section(
             icon: "hand.raised",
-            title: "对冒犯性内容零容忍",
+            title: "友善交流，共建社区",
             body: """
-            本 App 对冒犯性内容和滥用行为零容忍。禁止在 App 内发布或传播骚扰、辱骂、歧视、\
-            仇恨言论、色情、暴力、违法欺诈以及侵犯他人隐私的内容。违反者将被永久移出你的\
-            内容范围，情节严重的会被上报至 V2EX 站方处理。
+            希望你在这里友善交流，回复有用的信息，一起创建更好的社区。\
+            请避免发布骚扰、辱骂、歧视、仇恨言论、色情、暴力、违法欺诈以及\
+            侵犯他人隐私的内容。对冒犯性内容与滥用行为零容忍：相关内容会被移除，\
+            情节严重者将被上报至 V2EX 站方处理。
             """
         ),
         Section(
             icon: "flag",
             title: "举报",
             body: """
-            每一条话题和回复都可以举报：点右上角的「…」或长按内容，选择「举报」。\
-            举报提交后，该内容会立即从你的所有列表和帖子里消失，并且不会再出现。
+            每条话题和回复都可以举报：点右上角的「…」或长按内容，选择「举报」。\
+            举报后，相关内容会先从你的视野中移除，再由开发者核实处理。
             """
         ),
         Section(
             icon: "nosign",
             title: "屏蔽",
             body: """
-            你可以屏蔽任何用户或关键词。被屏蔽用户的话题和回复会立刻从首页、节点、搜索、\
-            收藏、历史以及帖子内部全部移除。屏蔽随时可以在「我的 → 内容与屏蔽」里撤销。
+            你可以屏蔽任何用户或关键词。屏蔽后，对方的话题和回复将不再出现在首页、节点、\
+            搜索、收藏、历史以及帖子中。随时可以在「我的 → 内容与屏蔽」里撤销。
             """
         ),
         Section(
@@ -53,7 +54,7 @@ enum Agreement {
             title: "24 小时内处理",
             body: """
             开发者会在收到举报后的 24 小时内核实：确认违规的内容会被移出 App，\
-            发布者会被拉入屏蔽名单，并同步上报给 V2EX 站方要求删除内容与封禁账号。
+            涉及的用户会被屏蔽，并视情节上报 V2EX 站方处理。如有疑问，可随时联系开发者申诉。
             """
         ),
         Section(
@@ -129,7 +130,7 @@ struct AgreementGateView: View {
                     }
 
                     if showDeclineNotice {
-                        Text("不同意条款就无法使用本 App —— 这里展示的全部是用户发布的内容，\n必须先确认你接受上述规范。你可以直接关闭 App。")
+                        Text("本 App 展示的是社区用户发布的内容。若暂时不想接受这些规范，\n可以先离开，随时欢迎你回来使用。")
                             .font(Type.body(13))
                             .lineSpacing(4)
                             .foregroundStyle(Theme.accent)
@@ -151,20 +152,20 @@ struct AgreementGateView: View {
                     Text("同意并继续")
                         .font(Type.title(16))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
+                        .padding(.vertical, 11)
                 }
                 .buttonStyle(.glassProminent)
-                .buttonBorderShape(.roundedRectangle(radius: 16))
+                .buttonBorderShape(.roundedRectangle(radius: 14))
                 .tint(Theme.accent)
 
                 Button {
                     withAnimation(.snappy) { showDeclineNotice = true }
                 } label: {
-                    Text("不同意")
-                        .font(Type.body(15))
+                    Text("暂不同意")
+                        .font(Type.body(14))
                         .foregroundStyle(Theme.muted)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.plain)
             }

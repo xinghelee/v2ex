@@ -5,6 +5,7 @@ struct V2EXApp: App {
     @StateObject private var settings = AppSettings()
     @StateObject private var token = TokenStore()
     @StateObject private var session = V2EXSessionStore()
+    @StateObject private var aiConfiguration = AIConfigurationStore()
     @StateObject private var followed = FollowedNodesStore()
     @StateObject private var readState = ReadStateStore()
     @StateObject private var favorites = FavoritesStore()
@@ -23,6 +24,7 @@ struct V2EXApp: App {
                 .environmentObject(settings)
                 .environmentObject(token)
                 .environmentObject(session)
+                .environmentObject(aiConfiguration)
                 .environmentObject(followed)
                 .environmentObject(readState)
                 .environmentObject(favorites)
@@ -36,6 +38,21 @@ struct V2EXApp: App {
                 .environmentObject(history)
                 .preferredColorScheme(settings.theme.colorScheme)
                 .tint(Theme.accent)
+                .task(id: spotlightSignature) {
+                    await SpotlightIndexer.shared.replace(with: spotlightTopics)
+                }
         }
+    }
+
+    private var spotlightTopics: [V2Topic] {
+        let stored = favorites.topics + history.entries.map(\.topic)
+        return moderation.filter(stored)
+    }
+
+    private var spotlightSignature: String {
+        spotlightTopics.map {
+            "\($0.id):\($0.lastTouched ?? $0.created ?? 0)"
+        }
+        .joined(separator: ",")
     }
 }
