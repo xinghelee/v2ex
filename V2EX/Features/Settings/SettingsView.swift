@@ -228,6 +228,7 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.muted)
                     .padding(.horizontal, Theme.Metric.headerPadding)
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }
@@ -325,6 +326,7 @@ struct TokenSetupView: View {
                     .foregroundStyle(Theme.muted)
                     .padding(.horizontal, Theme.Metric.headerPadding)
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }

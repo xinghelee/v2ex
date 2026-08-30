@@ -25,6 +25,7 @@ struct ModerationSettingsView: View {
                     .foregroundStyle(Theme.faint)
                     .padding(.horizontal, Theme.Metric.headerPadding)
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }

@@ -27,6 +27,7 @@ struct ReadingSettingsView: View {
                 readingSection
                 offlineSection
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }

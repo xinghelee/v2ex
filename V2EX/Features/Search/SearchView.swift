@@ -124,6 +124,7 @@ struct SearchView: View {
                     recentSearches
                 }
             }
+            .readableColumn()
             .padding(.top, 10)
             .padding(.bottom, 40)
         }

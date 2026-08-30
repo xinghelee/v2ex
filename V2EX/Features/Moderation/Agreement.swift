@@ -138,6 +138,7 @@ struct AgreementGateView: View {
                             .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                 }
+                .readableColumn()
                 .padding(.horizontal, Theme.Metric.screenPadding + 6)
                 .padding(.bottom, 24)
             }
@@ -242,6 +243,7 @@ struct TermsView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .readableColumn()
             .padding(.horizontal, Theme.Metric.screenPadding)
             .padding(.top, 12)
             .padding(.bottom, 40)

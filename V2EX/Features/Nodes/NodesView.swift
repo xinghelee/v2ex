@@ -90,6 +90,7 @@ struct NodesView: View {
                     categoriesSection
                 }
             }
+            .readableColumn()
             .padding(.top, 10)
             .padding(.bottom, 12)
         }

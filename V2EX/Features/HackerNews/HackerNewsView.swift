@@ -41,6 +41,7 @@ struct HackerNewsView: View {
                     }
                 }
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 110)
         }

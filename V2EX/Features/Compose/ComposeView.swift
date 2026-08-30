@@ -62,6 +62,7 @@ struct ComposeView: View {
                         formatBar
                         draftStatus
                     }
+                    .readableColumn()
                     .padding(.top, 14)
                     .padding(.bottom, 24)
                 }

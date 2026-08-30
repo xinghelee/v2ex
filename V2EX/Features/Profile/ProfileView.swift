@@ -63,6 +63,7 @@ struct ProfileView: View {
                     recentSection
                 }
             }
+            .readableColumn()
             .padding(.top, 10)
             .padding(.bottom, 12)
         }

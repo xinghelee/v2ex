@@ -104,6 +104,7 @@ struct NodeDetailView: View {
                 sortChips
                 topicList
             }
+            .readableColumn()
             .padding(.bottom, 12)
         }
         .scrollIndicators(.hidden)

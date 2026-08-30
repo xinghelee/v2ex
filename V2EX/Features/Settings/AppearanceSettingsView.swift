@@ -11,6 +11,7 @@ struct AppearanceSettingsView: View {
                 paletteSection
                 bodySection
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }

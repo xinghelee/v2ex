@@ -49,6 +49,7 @@ struct TopicDetailView: View {
                             .padding(.top, 8)
                         }
                     }
+                    .readableColumn()
                     .padding(.top, 6)
                     .padding(.bottom, 110)
                 }
@@ -75,6 +76,7 @@ struct TopicDetailView: View {
             }
 
             replyComposer
+                .readableColumn()
                 .offset(y: isComposerHidden ? 110 : 0)
                 .opacity(isComposerHidden ? 0 : 1)
                 .allowsHitTesting(!isComposerHidden)

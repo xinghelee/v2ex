@@ -141,6 +141,7 @@ struct NotificationsView: View {
         .pickerStyle(.segmented)
         .padding(.horizontal, Theme.Metric.screenPadding)
         .padding(.vertical, 8)
+        .readableColumn()
     }
 
     private func scopeLabel(_ kind: V2Notification.Kind?, title: String) -> String {
@@ -174,6 +175,7 @@ struct NotificationsView: View {
                     }
                 }
             }
+            .readableColumn()
             // Room for the floating tab bar + home indicator at the bottom.
             .padding(.bottom, 100)
         }

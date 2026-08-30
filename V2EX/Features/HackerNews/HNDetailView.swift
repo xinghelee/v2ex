@@ -49,6 +49,7 @@ struct HNDetailView: View {
                     .padding(.top, 8)
                 }
             }
+            .readableColumn()
             .padding(.top, 6)
             .padding(.bottom, 40)
         }

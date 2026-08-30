@@ -1,6 +1,6 @@
 # V2EX
 
-面向个人使用的 V2EX iOS 客户端。使用 SwiftUI 构建，采用 iOS 26 原生 Liquid Glass 组件，数据来自 V2EX API、网页会话和 sov2ex 搜索。
+面向个人使用的 V2EX iOS 客户端，支持 **iPhone 与 iPad**。使用 SwiftUI 构建，采用 iOS 26 原生 Liquid Glass 组件，数据来自 V2EX API、网页会话和 sov2ex 搜索。iPad 上列表与正文收窄为居中的可读栏宽，横竖屏均可使用。
 
 ## 下载
 
@@ -38,6 +38,7 @@
 | 网页会话 | App 内回复、收藏同步、关注节点同步；Cookie 只存储在 Keychain |
 | sov2ex | 社区全文索引，V2EX 无官方搜索接口 |
 | iOS 26 | 原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起 |
+| 多设备 | iPhone 竖屏、iPad 全方向；宽屏内容自动居中为 720pt 可读栏 |
 | 渲染 | 自研轻量 HTML 解析（段落/行内/图片提取），替代 NSAttributedString 方案 |
 | 存储 | Keychain（Token）、UserDefaults（设置）、磁盘缓存（离线包） |
 | 内容治理 | 首启条款闸门、举报与屏蔽，命中内容即时且持久地从全部列表移除 |

@@ -173,6 +173,7 @@ struct HomeView: View {
             }
             .id(feed)
         }
+        .readableColumn()
     }
 
     @ViewBuilder
@@ -228,6 +229,7 @@ struct HomeView: View {
                     }
                 }
             }
+            .readableColumn()
             .padding(.top, 10)
             // Room for the floating tab bar + home indicator at the bottom.
             .padding(.bottom, 100)

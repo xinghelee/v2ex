@@ -474,3 +474,26 @@ struct EmptyStateCard: View {
         }
     }
 }
+
+// MARK: - iPad 可读栏宽
+
+/// 把纵向滚动的内容限制在一个舒适的阅读栏宽里并居中，避免 iPad 上列表
+/// 被拉得左右贴边。iPhone 屏幕本来就窄于上限，所以这个修饰符在 iPhone
+/// 上是零成本空操作。
+struct ReadableColumn: ViewModifier {
+    var maxWidth: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity)
+    }
+}
+
+extension View {
+    /// 720pt ≈ iPad 阅读栏宽：横屏 11 寸上两侧各留约 240pt，内容不贴边
+    /// 也不会显得太窄。
+    func readableColumn(maxWidth: CGFloat = 720) -> some View {
+        modifier(ReadableColumn(maxWidth: maxWidth))
+    }
+}

@@ -45,6 +45,7 @@ struct FavoritesView: View {
                     .padding(.top, 8)
                 }
             }
+            .readableColumn()
             .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
@@ -135,6 +136,7 @@ struct HistoryView: View {
                         .padding(.top, 6)
                 }
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }
@@ -212,6 +214,7 @@ struct OfflineListView: View {
                     }
                 }
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }
@@ -258,6 +261,7 @@ struct MyPostsView: View {
                     .padding(.top, 8)
                 }
             }
+            .readableColumn()
             .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
@@ -325,6 +329,7 @@ struct MemberView: View {
                     }
                 }
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }

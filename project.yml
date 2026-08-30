@@ -50,6 +50,7 @@ targets:
         PRODUCT_NAME: V2EX
         INFOPLIST_FILE: V2EX/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: V2EX
-        TARGETED_DEVICE_FAMILY: "1"
+        # 1 = iPhone, 2 = iPad。iPhone 保持竖屏；iPad 走完整方向支持（见 Info.plist）。
+        TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_EMIT_LOC_STRINGS: YES
         GENERATE_INFOPLIST_FILE: NO

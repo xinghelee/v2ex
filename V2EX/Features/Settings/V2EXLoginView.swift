@@ -46,6 +46,7 @@ struct V2EXLoginView: View {
                     .padding(.horizontal, Theme.Metric.headerPadding)
                 }
             }
+            .readableColumn()
             .padding(.top, 8)
             .padding(.bottom, 40)
         }
