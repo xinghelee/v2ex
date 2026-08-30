@@ -52,6 +52,7 @@ struct NodesView: View {
 
     @StateObject private var model = NodesViewModel()
     @EnvironmentObject private var followed: FollowedNodesStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isEditingFollowed = false
     @FocusState private var isSearchFocused: Bool
 
@@ -183,17 +184,43 @@ struct NodesView: View {
         }
     }
 
+    /// iPad 上分类目录排成两列，iPhone 保持单列；行末与列尾的单元格
+    /// 不带分隔线，线只在相邻单元格之间出现。
+    private var categoryColumns: [GridItem] {
+        horizontalSizeClass == .regular
+            ? [GridItem(.flexible(), spacing: 0), GridItem(.flexible(), spacing: 0)]
+            : [GridItem(.flexible(), spacing: 0)]
+    }
+
     private var categoriesSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let categories = NodeCatalog.categories
+        let columns = categoryColumns.count
+        // 最后一行从哪开始：总数对列数取余（整除时从倒数第 columns 个开始）。
+        let remainder = categories.count % columns
+        let lastRowStart = categories.count - (remainder == 0 ? columns : remainder)
+        return VStack(alignment: .leading, spacing: 0) {
             GroupHeader(title: "全部分类")
             CardSection {
-                ForEach(Array(NodeCatalog.categories.enumerated()), id: \.element.id) { index, category in
-                    NavigationLink(value: Route.node(category.members[0])) {
-                        categoryRow(category)
-                    }
-                    .buttonStyle(.row)
-                    if index < NodeCatalog.categories.count - 1 {
-                        RowSeparator(leadingInset: 58)
+                LazyVGrid(columns: categoryColumns, spacing: 0) {
+                    ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
+                        NavigationLink(value: Route.node(category.members[0])) {
+                            categoryRow(category)
+                        }
+                        .buttonStyle(.row)
+                        .overlay(alignment: .bottom) {
+                            if index < lastRowStart {
+                                Rectangle()
+                                    .fill(Theme.separator)
+                                    .frame(height: Theme.Metric.hairline)
+                            }
+                        }
+                        .overlay(alignment: .trailing) {
+                            if columns == 2, index % 2 == 0, index < categories.count - 1 {
+                                Rectangle()
+                                    .fill(Theme.separator)
+                                    .frame(width: Theme.Metric.hairline)
+                            }
+                        }
                     }
                 }
             }

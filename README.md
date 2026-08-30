@@ -39,6 +39,7 @@
 | sov2ex | 社区全文索引，V2EX 无官方搜索接口 |
 | iOS 26 | 原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起 |
 | 多设备 | iPhone 竖屏、iPad 全方向；宽屏内容自动居中为 720pt 可读栏 |
+| iPad 双栏 | 宽屏（横屏/大窗）话题详情正文与楼层回复左右分栏、各自独立滚动 |
 | 渲染 | 自研轻量 HTML 解析（段落/行内/图片提取），替代 NSAttributedString 方案 |
 | 存储 | Keychain（Token）、UserDefaults（设置）、磁盘缓存（离线包） |
 | 内容治理 | 首启条款闸门、举报与屏蔽，命中内容即时且持久地从全部列表移除 |

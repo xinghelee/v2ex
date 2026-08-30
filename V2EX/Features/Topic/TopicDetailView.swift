@@ -30,48 +30,13 @@ struct TopicDetailView: View {
         ZStack(alignment: .bottom) {
             Theme.canvas.ignoresSafeArea()
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        if moderation.hiddenTopicIDs.contains(topicID) {
-                            hiddenTopicCard
-                        } else if let topic = model.topic {
-                            topicCard(topic)
-                            replyHeader(topic)
-                            replyList
-                        } else if model.isLoading {
-                            LoadingCard().padding(.top, 8)
-                        } else if let message = model.errorMessage {
-                            EmptyStateCard(icon: "exclamationmark.triangle", title: "打不开这个话题",
-                                           message: message, actionTitle: "在 V2EX 打开") {
-                                openURL(URL(string: "https://www.v2ex.com/t/\(topicID)")!)
-                            }
-                            .padding(.top, 8)
-                        }
-                    }
-                    .readableColumn()
-                    .padding(.top, 6)
-                    .padding(.bottom, 110)
-                }
-                .scrollIndicators(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-                .simultaneousGesture(composerVisibilityGesture)
-                .pullToRefresh {
-                    await model.load(
-                        id: topicID,
-                        token: token.token,
-                        cookie: session.cookie,
-                        cache: topicCache,
-                        offline: offline
-                    )
-                }
-                .onChange(of: model.replies.count) { _, count in
-                    guard settings.rememberReadingPosition, count > 0,
-                          let floor = readState.position(for: topicID), floor > 1 else { return }
-                    // Restore where the reader left off.
-                    if let target = model.replies.first(where: { $0.floor == floor }) {
-                        proxy.scrollTo(target.id, anchor: .top)
-                    }
+            // iPad 宽屏（横屏 / 大窗）双栏阅读：正文居左、楼层回复居右，
+            // 各自独立滚动；窄屏（iPhone / iPad 竖屏窄窗）保持单栏同轴。
+            GeometryReader { geo in
+                if geo.size.width > twoPaneWidthThreshold {
+                    twoPaneContent
+                } else {
+                    singlePaneContent
                 }
             }
 
@@ -106,6 +71,126 @@ struct TopicDetailView: View {
         }
         .sheet(item: $reportTarget) { ReportSheet(target: $0) }
         .onDisappear { replyDrafts.save() }
+    }
+
+    /// 双栏阈值；可用 `-twoPaneWidth 800` 启动参数覆盖，便于在竖屏或
+    /// 分屏窄窗下调试双栏布局（与 -openTopic 同一套调试手段）。
+    private var twoPaneWidthThreshold: CGFloat {
+        let args = ProcessInfo.processInfo.arguments
+        if let flag = args.firstIndex(of: "-twoPaneWidth"), flag + 1 < args.count,
+           let value = Double(args[flag + 1]) {
+            return CGFloat(value)
+        }
+        return 1050
+    }
+
+    // MARK: 单栏 / 双栏
+
+    /// 窄屏：正文与回复共用一根滚动轴。
+    private var singlePaneContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if moderation.hiddenTopicIDs.contains(topicID) {
+                        hiddenTopicCard
+                    } else if let topic = model.topic {
+                        topicCard(topic)
+                        replyHeader(topic)
+                        replyList
+                    } else if model.isLoading {
+                        LoadingCard().padding(.top, 8)
+                    } else if let message = model.errorMessage {
+                        EmptyStateCard(icon: "exclamationmark.triangle", title: "打不开这个话题",
+                                       message: message, actionTitle: "在 V2EX 打开") {
+                            openURL(URL(string: "https://www.v2ex.com/t/\(topicID)")!)
+                        }
+                        .padding(.top, 8)
+                    }
+                }
+                .readableColumn()
+                .padding(.top, 6)
+                .padding(.bottom, 110)
+            }
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(composerVisibilityGesture)
+            .pullToRefresh { await reload() }
+            .onChange(of: model.replies.count) { _, _ in restoreReadingPosition(proxy) }
+        }
+    }
+
+    /// 宽屏：正文左、回复右，各自独立滚动；中间一条发丝分隔线。回复区
+    /// 保持可读栏宽，楼层、举报、只看楼主等交互都在右栏原样工作。
+    private var twoPaneContent: some View {
+        HStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if moderation.hiddenTopicIDs.contains(topicID) {
+                        hiddenTopicCard
+                    } else if let topic = model.topic {
+                        topicCard(topic)
+                    } else if model.isLoading {
+                        LoadingCard().padding(.top, 8)
+                    } else if let message = model.errorMessage {
+                        EmptyStateCard(icon: "exclamationmark.triangle", title: "打不开这个话题",
+                                       message: message, actionTitle: "在 V2EX 打开") {
+                            openURL(URL(string: "https://www.v2ex.com/t/\(topicID)")!)
+                        }
+                        .padding(.top, 8)
+                    }
+                }
+                .readableColumn(maxWidth: 640)
+                .padding(.top, 6)
+                .padding(.bottom, 110)
+            }
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(composerVisibilityGesture)
+            .frame(maxWidth: .infinity)
+
+            Rectangle()
+                .fill(Theme.separator)
+                .frame(width: Theme.Metric.hairline)
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        if let topic = model.topic {
+                            replyHeader(topic)
+                            replyList
+                        }
+                    }
+                    .readableColumn(maxWidth: 640)
+                    .padding(.top, 6)
+                    .padding(.bottom, 110)
+                }
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(composerVisibilityGesture)
+                .pullToRefresh { await reload() }
+                .onChange(of: model.replies.count) { _, _ in restoreReadingPosition(proxy) }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func reload() async {
+        await model.load(
+            id: topicID,
+            token: token.token,
+            cookie: session.cookie,
+            cache: topicCache,
+            offline: offline
+        )
+    }
+
+    private func restoreReadingPosition(_ proxy: ScrollViewProxy) {
+        guard settings.rememberReadingPosition, model.replies.count > 0,
+              let floor = readState.position(for: topicID), floor > 1 else { return }
+        // Restore where the reader left off.
+        if let target = model.replies.first(where: { $0.floor == floor }) {
+            proxy.scrollTo(target.id, anchor: .top)
+        }
     }
 
     // MARK: @提及 补全

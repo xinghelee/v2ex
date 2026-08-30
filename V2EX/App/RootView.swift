@@ -59,6 +59,7 @@ struct RootView: View {
 
     /// Debug launch helper — lets automation open a topic directly:
     /// `simctl launch booted com.vibe.v2ex -openTopic 1231572`
+    /// 或直接落到某个标签：`-tab nodes`。
     init() {
         let arguments = ProcessInfo.processInfo.arguments
         if let flag = arguments.firstIndex(of: "-openTopic"),
@@ -67,6 +68,11 @@ struct RootView: View {
             var path = NavigationPath()
             path.append(Route.topic(id))
             _paths = State(initialValue: [.home: path])
+        }
+        if let flag = arguments.firstIndex(of: "-tab"),
+           flag + 1 < arguments.count,
+           let tab = AppTab.allCases.first(where: { "\($0)" == arguments[flag + 1] }) {
+            _selection = State(initialValue: tab)
         }
     }
 
