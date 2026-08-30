@@ -91,18 +91,30 @@ SIG="$(base64 < "$TMP/sig.bin")"
 
 cat <<EOF
 ============================================================
-OWNERSHIP VERIFICATION / 源码归属核验
-（粘贴到 App Store Connect -> 审核备注）
+APP REVIEW — SOURCE OWNERSHIP
+（整段粘贴到 App Store Connect -> Review Notes）
 ============================================================
+
+v2Explore is independently developed and maintained by Xinghe Lee,
+the owner of the source repository below. For routine review, no
+command-line or cryptographic verification is required.
+
+Please cross-check:
+- Repository: $REPO (owner: GitHub @xinghelee)
+- Bundle ID / Team ID: $APP_ID / $TEAM_ID
+- App version / build: $VERSION ($BUILD)
+- Git commit / state: $COMMIT ($GIT_STATE)
+- Human-readable ownership note: $REPO/blob/main/SOURCE_OWNERSHIP.md
+
+If additional evidence is required, please reply in the Resolution
+Center. I can sign a fresh reviewer-provided challenge with the same
+ownership key.
+
+OPTIONAL TECHNICAL PROOF / 可选技术证明
 Identifier: $IDENTIFIER
-Bundle ID: $APP_ID
-Team ID: $TEAM_ID
-App version / build: $VERSION ($BUILD)
-Git commit / state: $COMMIT ($GIT_STATE)
-Repo: $REPO
-  SOURCE_OWNERSHIP.md 公开前缀: $PREFIX （完整串仅此处提供）
-  公钥指纹: $FINGERPRINT （对应 tag v1.2.0-owner-proof）
-  验签方法: docs/ownership-verification.md
+Public prefix: $PREFIX
+Public-key fingerprint: $FINGERPRINT
+Verification procedure: $REPO/blob/main/docs/ownership-verification.md
 
 Signed message:
 $MSG
