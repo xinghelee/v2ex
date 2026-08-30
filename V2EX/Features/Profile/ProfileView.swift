@@ -160,7 +160,7 @@ struct ProfileView: View {
     }
 
     private var signedOutCard: some View {
-        NavigationLink(value: Route.tokenSetup) {
+        NavigationLink(value: Route.settings) {
             CardSection(padding: 18) {
                 VStack(alignment: .leading, spacing: 15) {
                     HStack(spacing: 14) {
@@ -178,7 +178,7 @@ struct ProfileView: View {
                                 .font(.system(size: 21, weight: .bold))
                                 .kerning(-0.5)
                                 .foregroundStyle(Theme.ink)
-                            Text("浏览不受影响；连接账号后可查看通知与个人内容。")
+                            Text("浏览不受影响；连接账号后可按需启用回复、通知与个人内容。")
                                 .font(Type.meta(13))
                                 .lineSpacing(2)
                                 .foregroundStyle(Theme.muted)
@@ -201,7 +201,7 @@ struct ProfileView: View {
         }
         .buttonStyle(.row)
         .accessibilityLabel("访客模式，连接 V2EX 账号")
-        .accessibilityHint("填写 Access Token")
+        .accessibilityHint("打开设置，选择网页登录或 Access Token")
     }
 
     // MARK: - Library

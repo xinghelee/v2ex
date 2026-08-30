@@ -61,8 +61,21 @@ struct V2EXLoginView: View {
             TwoFactorSheet(onDone: { dismiss() })
         }
         // 网页登录：底部弹窗。
-        .sheet(isPresented: $showWebLogin) {
-            WebLoginSheet(onDone: { dismiss() })
+        .sheet(isPresented: $showWebLogin, onDismiss: {
+            // 先让网页弹层完成关闭，再退出这一层登录页，避免两个 dismiss
+            // 在同一轮状态更新里互相覆盖。
+            if session.isLoggedIn {
+                dismiss()
+            }
+        }) {
+            WebLoginSheet()
+        }
+        .onChange(of: session.isLoggedIn) { _, isLoggedIn in
+            // 登录回调先保存 session；父页面观察这份唯一状态并负责收起弹层。
+            // 即使 WebView 的回调与页面重绘发生在同一帧，也不会漏掉关闭动作。
+            if isLoggedIn {
+                showWebLogin = false
+            }
         }
     }
 
@@ -391,8 +404,8 @@ private struct WebLoginSheet: View {
     @EnvironmentObject private var session: V2EXSessionStore
     @Environment(\.dismiss) private var dismiss
 
-    /// 登录成功并保存会话后，关闭整个登录页。
-    var onDone: () -> Void
+    /// 网页端登录表单已消失、正在验证会话（可能一两秒），期间显示浮层提示。
+    @State private var isVerifying = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -428,9 +441,26 @@ private struct WebLoginSheet: View {
 
             WebLoginView { cookie, username in
                 session.save(cookie: cookie, username: username)
-                dismiss()
-                onDone()
+            } onVerifyingChanged: { verifying in
+                isVerifying = verifying
             }
+            .overlay(alignment: .bottom) {
+                if isVerifying {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("登录成功，正在验证会话…")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.ink)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isVerifying)
         }
         .background(Theme.canvas)
         .presentationDetents([.large])
