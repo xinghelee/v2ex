@@ -37,6 +37,10 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        // Never show the previous category's rows under a newly selected chip
+        // while its request is in flight. A brief, honest loading state is less
+        // disorienting than content that changes identity a moment later.
+        if !force { topics = [] }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }

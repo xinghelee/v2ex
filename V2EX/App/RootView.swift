@@ -45,6 +45,7 @@ enum AppTab: Int, CaseIterable, Identifiable {
 enum Route: Hashable {
     case topic(Int)
     case node(String)
+    case nodeCategory(String)
     case member(String)
     case favorites
     case history
@@ -313,6 +314,12 @@ struct RootView: View {
         switch route {
         case .topic(let id): TopicDetailView(topicID: id)
         case .node(let name): NodeDetailView(nodeName: name)
+        case .nodeCategory(let id):
+            if let category = NodeCatalog.categories.first(where: { $0.id == id }) {
+                NodeCategoryView(category: category)
+            } else {
+                NodesView()
+            }
         case .member(let name): MemberView(username: name)
         case .favorites: FavoritesView()
         case .history: HistoryView()

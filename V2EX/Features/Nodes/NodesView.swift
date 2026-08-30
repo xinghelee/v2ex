@@ -53,6 +53,7 @@ struct NodesView: View {
     @StateObject private var model = NodesViewModel()
     @EnvironmentObject private var followed: FollowedNodesStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isEditingFollowed = false
     @FocusState private var isSearchFocused: Bool
 
@@ -70,9 +71,14 @@ struct NodesView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        withAnimation(.snappy) { isEditingFollowed.toggle() }
+                        if reduceMotion {
+                            isEditingFollowed.toggle()
+                        } else {
+                            withAnimation(.snappy(duration: 0.24)) { isEditingFollowed.toggle() }
+                        }
                     } label: {
                         Image(systemName: isEditingFollowed ? "checkmark" : "pencil")
+                            .contentTransition(.symbolEffect(.replace))
                     }
                     .accessibilityLabel(isEditingFollowed ? "完成编辑" : "编辑关注节点")
                 }
@@ -154,33 +160,57 @@ struct NodesView: View {
         }
     }
 
+    @ViewBuilder
     private func followedChip(_ name: String) -> some View {
         let title = NodeCatalog.displayName(for: name)
-        return HStack(spacing: 7) {
-            IdentitySquare(text: title, size: 20, imageURL: model.node(named: name)?.avatarURL)
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Theme.ink)
-            if isEditingFollowed {
+
+        if isEditingFollowed {
+            HStack(spacing: 7) {
+                IdentitySquare(text: title, size: 20, imageURL: model.node(named: name)?.avatarURL)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityHidden(true)
                 Button {
-                    withAnimation(.snappy) { followed.remove(name) }
+                    if reduceMotion {
+                        followed.remove(name)
+                    } else {
+                        withAnimation(.snappy(duration: 0.2)) { followed.remove(name) }
+                    }
                 } label: {
                     Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: 16))
                         .foregroundStyle(Theme.unreadDot)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("取消关注 \(title)")
             }
-        }
-        .padding(.leading, 7)
-        .padding(.trailing, 11)
-        .padding(.vertical, 6)
-        .background(Theme.inset, in: Capsule())
-        .overlay {
-            if !isEditingFollowed {
-                NavigationLink(value: Route.node(name)) { Color.clear }
-                    .buttonStyle(.plain)
+            .padding(.leading, 7)
+            .padding(.trailing, 5)
+            .padding(.vertical, 3)
+            .background(Theme.inset, in: Capsule())
+            .frame(minHeight: 44)
+            .transition(.scale(scale: 0.92).combined(with: .opacity))
+        } else {
+            NavigationLink(value: Route.node(name)) {
+                HStack(spacing: 7) {
+                    IdentitySquare(text: title, size: 20, imageURL: model.node(named: name)?.avatarURL)
+                    Text(title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Theme.ink)
+                }
+                .padding(.leading, 7)
+                .padding(.trailing, 11)
+                .padding(.vertical, 6)
+                .background(Theme.inset, in: Capsule())
+                .frame(minHeight: 44)
             }
+            .buttonStyle(.row)
+            .accessibilityLabel("打开 \(title) 节点")
+            .transition(.scale(scale: 0.92).combined(with: .opacity))
         }
     }
 
@@ -203,7 +233,7 @@ struct NodesView: View {
             CardSection {
                 LazyVGrid(columns: categoryColumns, spacing: 0) {
                     ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
-                        NavigationLink(value: Route.node(category.members[0])) {
+                        NavigationLink(value: Route.nodeCategory(category.id)) {
                             categoryRow(category)
                         }
                         .buttonStyle(.row)
@@ -230,13 +260,13 @@ struct NodesView: View {
     private func categoryRow(_ category: NodeCatalog.Category) -> some View {
         HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Theme.accent)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Theme.accentSoft)
                 Image(systemName: category.icon)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.accent)
             }
-            .frame(width: 30, height: 30)
+            .frame(width: 32, height: 32)
             VStack(alignment: .leading, spacing: 1) {
                 Text(category.title)
                     .font(.system(size: 17))
@@ -280,6 +310,107 @@ struct NodesView: View {
         }
         .padding(.horizontal, 16)
         .frame(minHeight: 54)
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Category detail
+
+/// A category row represents a collection, so it opens the collection instead
+/// of silently jumping to its first node. The API has no category endpoint;
+/// this view resolves the catalog's member names against the live all-nodes
+/// response and keeps readable stubs available while offline.
+struct NodeCategoryView: View {
+    let category: NodeCatalog.Category
+
+    @StateObject private var model = NodesViewModel()
+
+    private var categoryNodes: [V2Node] {
+        let live = model.nodes(in: category)
+        guard live.isEmpty else { return live }
+        return category.members.map {
+            V2Node.stub(name: $0, title: NodeCatalog.displayName(for: $0))
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                categoryHeader
+
+                VStack(alignment: .leading, spacing: 0) {
+                    GroupHeader(title: "节点", trailing: "\(categoryNodes.count) 个")
+                    CardSection {
+                        ForEach(Array(categoryNodes.enumerated()), id: \.element.id) { index, node in
+                            NavigationLink(value: Route.node(node.name)) {
+                                nodeRow(node)
+                            }
+                            .buttonStyle(.row)
+
+                            if index < categoryNodes.count - 1 {
+                                RowSeparator(leadingInset: 62)
+                            }
+                        }
+                    }
+                }
+            }
+            .readableColumn()
+            .padding(.top, 8)
+            .padding(.bottom, 36)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.canvas)
+        .navigationTitle(category.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await model.load() }
+    }
+
+    private var categoryHeader: some View {
+        CardSection(padding: 18) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(Theme.accentSoft)
+                    Image(systemName: category.icon)
+                        .font(.system(size: 23, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+                .frame(width: 54, height: 54)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(category.title)
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundStyle(Theme.ink)
+                    Text(NodeCatalog.subtitle(for: category))
+                        .font(Type.meta(13))
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(2)
+                }
+            }
+        }
+    }
+
+    private func nodeRow(_ node: V2Node) -> some View {
+        HStack(spacing: 12) {
+            IdentitySquare(text: node.title, size: 34, imageURL: node.avatarURL)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(node.title)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Theme.ink)
+                Text("/go/\(node.name)")
+                    .font(Type.meta(12))
+                    .foregroundStyle(Theme.muted)
+            }
+            Spacer(minLength: 8)
+            if let topics = node.topics {
+                Text(topics.formatted())
+                    .font(Type.number(14, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+            }
+            Chevron()
+        }
+        .padding(.horizontal, Theme.Metric.cardPadding)
+        .frame(minHeight: 58)
         .contentShape(Rectangle())
     }
 }

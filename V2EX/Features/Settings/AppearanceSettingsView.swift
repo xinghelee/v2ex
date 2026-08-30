@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AppearanceSettingsView: View {
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView {
@@ -40,7 +41,7 @@ struct AppearanceSettingsView: View {
     private func themeCard(_ preference: ThemePreference) -> some View {
         let isSelected = settings.theme == preference
         return Button {
-            withAnimation(.snappy) { settings.theme = preference }
+            updateSelection { settings.theme = preference }
         } label: {
             VStack(spacing: 7) {
                 preview(for: preference)
@@ -53,12 +54,25 @@ struct AppearanceSettingsView: View {
                                 lineWidth: isSelected ? 2 : 1
                             )
                     }
+                    .overlay(alignment: .topTrailing) {
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Theme.accent)
+                                .padding(6)
+                                .transition(.scale(scale: 0.7).combined(with: .opacity))
+                        }
+                    }
                 Text(preference.title)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? Theme.accent : Theme.muted)
             }
+            .frame(maxWidth: .infinity)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: isSelected)
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isSelected ? "已选择" : "未选择")
     }
 
     // MARK: 主题色
@@ -80,7 +94,7 @@ struct AppearanceSettingsView: View {
     private func paletteCard(_ palette: ThemePalette) -> some View {
         let isSelected = settings.palette == palette
         return Button {
-            withAnimation(.snappy) { settings.palette = palette }
+            updateSelection { settings.palette = palette }
         } label: {
             VStack(spacing: 10) {
                 Circle()
@@ -101,13 +115,23 @@ struct AppearanceSettingsView: View {
                             .padding(-5)
                             .opacity(isSelected ? 1 : 0)
                     }
+                    .overlay {
+                        if isSelected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+                                .transition(.scale(scale: 0.7).combined(with: .opacity))
+                        }
+                    }
                     .frame(maxWidth: .infinity)
                 Text(palette.title)
                     .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? Theme.accent : Theme.muted)
             }
+            .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: isSelected)
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isSelected ? "已选择" : "未选择")
     }
 
     @ViewBuilder
@@ -197,6 +221,14 @@ struct AppearanceSettingsView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
+        }
+    }
+
+    private func updateSelection(_ changes: () -> Void) {
+        if reduceMotion {
+            changes()
+        } else {
+            withAnimation(.snappy(duration: 0.24), changes)
         }
     }
 

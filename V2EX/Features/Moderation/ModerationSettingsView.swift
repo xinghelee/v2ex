@@ -12,7 +12,7 @@ struct ModerationSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                PageIntro(text: "屏蔽与举报都只影响这台设备上你看到的内容。举报会同时发给开发者，由开发者在 24 小时内核实并上报 V2EX 站方。")
+                moderationSummary
 
                 keywordSection
                 usernameSection
@@ -32,7 +32,58 @@ struct ModerationSettingsView: View {
         .scrollIndicators(.hidden)
         .background(Theme.canvas)
         .navigationTitle("内容与屏蔽")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+    }
+
+    // MARK: 概览
+
+    private var moderationSummary: some View {
+        CardSection(padding: 18) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 13) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 50, height: 50)
+                        .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("你的内容边界")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(Theme.ink)
+                        Text("规则只在这台设备生效，随时可以撤销。")
+                            .font(Type.meta(12))
+                            .foregroundStyle(Theme.muted)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+
+                HStack(spacing: 0) {
+                    summaryMetric(moderation.keywords.count, label: "关键词")
+                    summaryMetric(moderation.usernames.count, label: "用户")
+                    summaryMetric(moderation.hiddenTopicIDs.count + moderation.hiddenReplyIDs.count, label: "已隐藏")
+                    summaryMetric(moderation.pendingReportCount, label: "待送达")
+                }
+            }
+        }
+    }
+
+    private func summaryMetric(_ value: Int, label: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value.formatted())
+                .font(Type.number(19, weight: .bold))
+                .foregroundStyle(value == 0 ? Theme.faint : Theme.ink)
+                .contentTransition(.numericText(value: Double(value)))
+            Text(label)
+                .font(Type.label(10))
+                .foregroundStyle(Theme.muted)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 9)
+        .background(Theme.inset, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .padding(.horizontal, 3)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: 屏蔽名单
@@ -183,11 +234,15 @@ struct ModerationSettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             GroupHeader(title: header)
             CardSection {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     TextField(placeholder, text: text)
-                        .font(.system(size: 16))
+                        .font(.system(size: 15))
+                        .accessibilityLabel(placeholder)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .padding(.horizontal, 12)
+                        .frame(height: 42)
+                        .background(Theme.inset, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                         .onSubmit {
                             onAdd(text.wrappedValue)
                             text.wrappedValue = ""
@@ -196,15 +251,17 @@ struct ModerationSettingsView: View {
                         onAdd(text.wrappedValue)
                         text.wrappedValue = ""
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(Theme.accent)
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 42, height: 42)
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .disabled(text.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .accessibilityLabel("添加")
                 }
-                .padding(.horizontal, 16)
-                .frame(minHeight: 54)
+                .padding(12)
 
                 ForEach(items, id: \.self) { item in
                     RowSeparator()

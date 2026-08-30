@@ -26,7 +26,7 @@ struct SettingsView: View {
                                 subtitle: token.hasToken ? "已连接" : "未设置"
                             ) { Chevron() }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         RowSeparator(leadingInset: 54)
 
                         NavigationLink(value: Route.v2exLogin) {
@@ -39,7 +39,7 @@ struct SettingsView: View {
                                     : "未登录（用于 app 内回复）"
                             ) { Chevron() }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         RowSeparator(leadingInset: 54)
 
                         // 这个开关依赖登录态，跟着账号走才讲得通；它原本落在
@@ -74,7 +74,7 @@ struct SettingsView: View {
                                 Chevron()
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         RowSeparator(leadingInset: 54)
 
                         NavigationLink(value: Route.reading) {
@@ -85,7 +85,7 @@ struct SettingsView: View {
                                 subtitle: "阅读进度、自动离线与缓存"
                             ) { Chevron() }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                     }
                 }
 
@@ -102,7 +102,7 @@ struct SettingsView: View {
                                     : "Apple Intelligence 不可用时作为回退"
                             ) { Chevron() }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                     }
                 }
 
@@ -175,7 +175,7 @@ struct SettingsView: View {
                                 Chevron()
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         RowSeparator(leadingInset: 54)
 
                         Button {
@@ -190,7 +190,7 @@ struct SettingsView: View {
                                 Chevron()
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         RowSeparator(leadingInset: 54)
 
                         NavigationLink(value: Route.blocked) {
@@ -203,7 +203,7 @@ struct SettingsView: View {
                                 Chevron()
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         RowSeparator(leadingInset: 54)
 
                         Button {
@@ -219,7 +219,7 @@ struct SettingsView: View {
                                 Chevron()
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         RowSeparator(leadingInset: 54)
 
                         Button {
@@ -229,7 +229,7 @@ struct SettingsView: View {
                                 Chevron()
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         RowSeparator(leadingInset: 54)
 
                         SettingsRow(icon: "info.circle", iconColor: Theme.accent, title: "版本") {

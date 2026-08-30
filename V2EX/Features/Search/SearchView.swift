@@ -285,29 +285,39 @@ struct SearchView: View {
             GroupHeader(title: "最近搜索", trailing: "清空") { recents.clear() }
             CardSection {
                 ForEach(Array(recents.queries.enumerated()), id: \.element) { index, query in
-                    HStack(spacing: 10) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Theme.muted)
-                        Text(query)
-                            .font(.system(size: 16))
-                            .foregroundStyle(Theme.ink)
-                        Spacer()
+                    HStack(spacing: 0) {
+                        Button {
+                            model.query = query
+                            submit()
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(Theme.muted)
+                                Text(query)
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Theme.ink)
+                                    .lineLimit(1)
+                                Spacer(minLength: 8)
+                            }
+                            .padding(.leading, 16)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.row)
+                        .accessibilityLabel("再次搜索 \(query)")
+
                         Button {
                             recents.remove(query)
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(Theme.faint)
+                                .frame(width: 44, height: 48)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 48)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        model.query = query
-                        submit()
+                        .accessibilityLabel("移除搜索记录 \(query)")
                     }
                     if index < recents.queries.count - 1 { RowSeparator(leadingInset: 41) }
                 }
