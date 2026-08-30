@@ -304,6 +304,8 @@ extension ButtonStyle where Self == PressableRowStyle {
 // MARK: - Chips
 
 /// Pill filter used for the home tabs, node sort order, notification scopes…
+/// 未选中时是玻璃胶囊（毛玻璃材质 + 高光描边，模拟器与真机都可见）；
+/// 选中保持 accent 实心，选中态最清晰。
 struct FilterChip: View {
     let title: String
     let isSelected: Bool
@@ -311,14 +313,27 @@ struct FilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? Color.white : Theme.muted)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(isSelected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.chipFill))
-                .clipShape(Capsule())
-                .animation(.snappy(duration: 0.2), value: isSelected)
+            Group {
+                if isSelected {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(Theme.accent))
+                } else {
+                    Text(title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .overlay {
+                            Capsule().strokeBorder(.white.opacity(0.35), lineWidth: 0.5)
+                        }
+                }
+            }
+            .animation(.snappy(duration: 0.2), value: isSelected)
         }
         .buttonStyle(.plain)
     }
@@ -335,6 +350,10 @@ struct ChipRail<Item: Hashable, Label: View, Trailing: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
+                // 用普通 HStack 排布，不用 GlassEffectContainer——它在横向
+                // ScrollView 里布局不稳定（玻璃融合特性会把相邻胶囊连成
+                // 一条，或让容器塌缩）。glassEffect 直接做在 chip 上，
+                // 真机依然是液态玻璃。
                 HStack(spacing: 8) {
                     ForEach(items, id: \.self, content: label)
                     trailing
