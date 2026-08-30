@@ -23,6 +23,7 @@ struct TopicDetailView: View {
     @State private var isSyncingFavorite = false
     @State private var isComposerHidden = false
     @State private var showShareCard = false
+    @State private var showShareLink = false
     @State private var reportTarget: ModerationTarget?
     @FocusState private var composerFocused: Bool
 
@@ -66,11 +67,38 @@ struct TopicDetailView: View {
         }
         .sheet(isPresented: $showShareCard) {
             if let topic = model.topic {
-                TopicShareCardSheet(topic: topic)
+                TopicShareCardSheet(
+                    topic: topic,
+                    summarySource: shareSummaryContext.source,
+                    summarySignature: shareSummaryContext.signature,
+                    offersSummary: shareSummaryContext.offers
+                )
+            }
+        }
+        .sheet(isPresented: $showShareLink) {
+            if let topic = model.topic {
+                TopicShareLinkSheet(
+                    topic: topic,
+                    summarySource: shareSummaryContext.source,
+                    summarySignature: shareSummaryContext.signature,
+                    offersSummary: shareSummaryContext.offers
+                )
             }
         }
         .sheet(item: $reportTarget) { ReportSheet(target: $0) }
         .onDisappear { replyDrafts.save() }
+    }
+
+    /// 分享相关面板共用的摘要输入：正文 + 可见回复组成的源文本、缓存签名
+    /// 与「是否值得生成摘要」判定。两个面板共用，避免重复计算。
+    private var shareSummaryContext: (source: String, signature: String, offers: Bool) {
+        let summaryReplies = moderation.visible(model.replies)
+        let source = model.summarySource(from: summaryReplies)
+        return (
+            source,
+            model.summarySignature(for: source, visibleReplyCount: summaryReplies.count),
+            model.shouldOfferSummary(visibleReplyCount: summaryReplies.count)
+        )
     }
 
     /// 双栏阈值；可用 `-twoPaneWidth 800` 启动参数覆盖，便于在竖屏或
@@ -369,7 +397,11 @@ struct TopicDetailView: View {
                         )
                     }
                     if let topic = model.topic {
-                        ShareLink(item: topic.webURL) { Label("分享链接", systemImage: "link") }
+                        Button {
+                            showShareLink = true
+                        } label: {
+                            Label("分享链接", systemImage: "link")
+                        }
                         Button {
                             showShareCard = true
                         } label: {

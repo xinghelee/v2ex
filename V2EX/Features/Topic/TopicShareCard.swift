@@ -16,11 +16,15 @@ struct TopicShareCardData {
     /// True when the body was longer than the cap — the card then says so
     /// instead of ending mid-sentence with no explanation.
     let isTruncated: Bool
+    /// Discussion summary generated for the share card. When present it
+    /// replaces the raw excerpt — for a long thread that's the more useful
+    /// thing to hand someone in chat.
+    let aiSummary: String?
     let replies: Int
     let url: URL
     let avatar: UIImage?
 
-    init(topic: V2Topic, avatar: UIImage?) {
+    init(topic: V2Topic, avatar: UIImage?, aiSummary: String? = nil) {
         title = topic.title
         author = topic.authorName
         nodeTitle = topic.nodeTitle
@@ -28,6 +32,7 @@ struct TopicShareCardData {
         let body = Self.excerpt(from: topic.content ?? "")
         excerpt = body.text
         isTruncated = body.truncated
+        self.aiSummary = aiSummary
         replies = topic.replies
         url = topic.webURL
         self.avatar = avatar
@@ -107,7 +112,11 @@ struct TopicShareCard: View {
             header
             title
             author
-            if !data.excerpt.isEmpty { excerptText }
+            if let summary = data.aiSummary {
+                summaryBlock(summary)
+            } else if !data.excerpt.isEmpty {
+                excerptText
+            }
             divider
             footer
         }
@@ -160,6 +169,36 @@ struct TopicShareCard: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    /// The summary is the point of sharing a long thread: it condenses the
+    /// discussion to what someone in chat actually wants. Rendered synchronously
+    /// like everything else on the card.
+    private func summaryBlock(_ summary: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("AI 摘要")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(Theme.accent)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Theme.accentSoft, in: Capsule())
+
+            Text(summary)
+                .font(.system(size: 14))
+                .lineSpacing(5)
+                .foregroundStyle(Theme.body)
+                .lineLimit(10)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+
+            Text("AI 生成，可能不准确")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Theme.muted)
         }
     }
 
@@ -344,18 +383,233 @@ enum TopicShareCardRenderer {
     }
 }
 
+// MARK: - 分享链接 + AI 摘要
+
+/// 分享链接，可选附带一段 AI 生成的讨论摘要。摘要由用户主动生成，
+/// 与话题页的 AI 卡片共用缓存 —— 生成过一次就不会重复调用模型。
+struct TopicShareLinkSheet: View {
+    let topic: V2Topic
+    let summarySource: String
+    let summarySignature: String
+    let offersSummary: Bool
+
+    @EnvironmentObject private var aiConfiguration: AIConfigurationStore
+    @Environment(\.dismiss) private var dismiss
+
+    @StateObject private var summaryModel: TopicSummaryViewModel
+
+    init(
+        topic: V2Topic,
+        summarySource: String = "",
+        summarySignature: String = "",
+        offersSummary: Bool = false
+    ) {
+        self.topic = topic
+        self.summarySource = summarySource
+        self.summarySignature = summarySignature
+        self.offersSummary = offersSummary
+        _summaryModel = StateObject(wrappedValue: TopicSummaryViewModel(topicID: topic.id))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        linkRow
+                        summarySection
+                    }
+                    .padding(.top, 8)
+                }
+                .scrollIndicators(.hidden)
+
+                shareButton
+                    .padding(.bottom, 12)
+            }
+            .padding(.horizontal, Theme.Metric.screenPadding)
+            .background(Theme.canvas.ignoresSafeArea())
+            .navigationTitle("分享链接")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+        }
+        .task(id: summarySignature) { summaryModel.load(signature: summarySignature) }
+    }
+
+    private var linkRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "link")
+                .foregroundStyle(Theme.accent)
+            Text(topic.webURL.absoluteString)
+                .font(.system(size: 14, design: .monospaced))
+                .foregroundStyle(Theme.body)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var summarySection: some View {
+        if let summary = summaryModel.summary {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(Theme.accent)
+                    Text("AI 摘要")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                    Spacer()
+                    Button("重新生成") { generate() }
+                        .font(.system(size: 12, weight: .medium))
+                        .disabled(summaryModel.isGenerating)
+                }
+
+                Text(summary)
+                    .font(.system(size: 14))
+                    .lineSpacing(4)
+                    .foregroundStyle(Theme.body)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("AI 生成，可能不准确")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        } else if summaryModel.isGenerating {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text(summaryModel.isOnDeviceModelAvailable
+                    ? "正在设备上阅读这段讨论…"
+                    : "正在生成摘要…")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        } else {
+            Button(action: generate) {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("生成 AI 摘要")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                        Text(availabilityHint)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.muted)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.faint)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canGenerate)
+        }
+    }
+
+    private var availabilityHint: String {
+        if summaryModel.isOnDeviceModelAvailable {
+            return "在设备上完成，帖子内容不会上传"
+        } else if aiConfiguration.isConfigured {
+            return "通过 \(aiConfiguration.providerName ?? "AI API") 生成"
+        } else {
+            return "需要支持 Apple Intelligence 的设备或自定义 AI API"
+        }
+    }
+
+    private var canGenerate: Bool {
+        summaryModel.isOnDeviceModelAvailable || aiConfiguration.isConfigured
+    }
+
+    private func generate() {
+        Task {
+            await summaryModel.generate(
+                source: summarySource,
+                signature: summarySignature,
+                cloudConfiguration: aiConfiguration.configuration
+            )
+        }
+    }
+
+    private var shareText: String {
+        let link = topic.webURL.absoluteString
+        guard let summary = summaryModel.summary, !summary.isEmpty else { return link }
+        return """
+        AI 摘要 · \(topic.title)
+
+        \(summary)
+
+        原文：\(link)
+        """
+    }
+
+    private var shareButton: some View {
+        ShareLink(item: shareText) {
+            Label(
+                summaryModel.summary == nil ? "分享链接" : "分享链接与摘要",
+                systemImage: "square.and.arrow.up"
+            )
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(Theme.accent, in: Capsule())
+        }
+    }
+}
+
 // MARK: - Sheet
 
 /// Preview + share. Rendering happens once on appear; the sheet shows the live
 /// SwiftUI card until the bitmap is ready so there is no empty first frame.
 struct TopicShareCardSheet: View {
     let topic: V2Topic
+    /// Discussion text the summary model reads; empty when the thread is too
+    /// short to warrant one.
+    let summarySource: String
+    /// Cache key for the summary; shared with the in-thread AI card so an
+    /// already-generated summary shows up here without another model run.
+    let summarySignature: String
+    /// Whether this thread qualifies for a summary at all.
+    let offersSummary: Bool
 
+    @EnvironmentObject private var aiConfiguration: AIConfigurationStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var data: TopicShareCardData?
     @State private var rendered: UIImage?
+    @StateObject private var summaryModel: TopicSummaryViewModel
+
+    init(
+        topic: V2Topic,
+        summarySource: String = "",
+        summarySignature: String = "",
+        offersSummary: Bool = false
+    ) {
+        self.topic = topic
+        self.summarySource = summarySource
+        self.summarySignature = summarySignature
+        self.offersSummary = offersSummary
+        _summaryModel = StateObject(wrappedValue: TopicSummaryViewModel(topicID: topic.id))
+    }
 
     var body: some View {
         NavigationStack {
@@ -369,6 +623,12 @@ struct TopicShareCardSheet: View {
                         preview.padding(.vertical, 12)
                     }
                     .scrollIndicators(.hidden)
+
+                    if offersSummary && summaryModel.isGenerating {
+                        Label("正在生成 AI 摘要…", systemImage: "sparkles")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                    }
 
                     shareButton
                 }
@@ -389,6 +649,24 @@ struct TopicShareCardSheet: View {
             let card = TopicShareCardData(topic: topic, avatar: avatar)
             data = card
             rendered = TopicShareCardRenderer.image(for: card, colorScheme: colorScheme)
+
+            // Auto-generate the summary when the thread qualifies. Cache is
+            // shared with the in-thread AI card, so an existing summary lands
+            // instantly; otherwise the model runs while the user looks at the
+            // card, and the card swaps in the summary when it's ready.
+            guard offersSummary, !summarySource.isEmpty else { return }
+            summaryModel.load(signature: summarySignature)
+            if summaryModel.summary == nil {
+                await summaryModel.generate(
+                    source: summarySource,
+                    signature: summarySignature,
+                    cloudConfiguration: aiConfiguration.configuration
+                )
+            }
+            guard let summary = summaryModel.summary, !summary.isEmpty else { return }
+            let updated = TopicShareCardData(topic: topic, avatar: avatar, aiSummary: summary)
+            data = updated
+            rendered = TopicShareCardRenderer.image(for: updated, colorScheme: colorScheme)
         }
     }
 
