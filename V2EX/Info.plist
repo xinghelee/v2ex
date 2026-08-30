@@ -40,7 +40,9 @@
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
-		<string></string>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchLogo</string>
 	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
