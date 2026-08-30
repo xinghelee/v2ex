@@ -129,7 +129,10 @@ final class TopicSummaryViewModel: ObservableObject {
             如果没有明显分歧，明确写“暂无明显分歧”。
             """
         )
-        let session = LanguageModelSession(model: model, dynamicInstructions: instructions)
+        // iOS 26 的 LanguageModelSession 用 `instructions:` 传入静态指令；
+        // iOS 27 把同一参数改名为 `dynamicInstructions:`。用 `instructions:`
+        // 可同时兼容两代 SDK（iOS 27 仍保留旧签名），避免 Xcode 26 编译失败。
+        let session = LanguageModelSession(model: model, instructions: instructions)
 
         let response = try await session.respond(
             to: "请总结下面这段 V2EX 讨论：\n\n\(source)",

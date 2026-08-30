@@ -4,6 +4,8 @@ import Foundation
 struct OpenHotTopicsIntent: AppIntent {
     static let title: LocalizedStringResource = "打开 V2EX 最热话题"
     static let description = IntentDescription("直接进入 V2EX 今日最热话题。")
+    /// iOS 26 起支持 IntentModes；低版本使用协议默认值（所有模式可用）。
+    @available(iOS 26.0, *)
     static var supportedModes: IntentModes { .foreground }
 
     func perform() async throws -> some IntentResult & OpensIntent {
@@ -14,6 +16,7 @@ struct OpenHotTopicsIntent: AppIntent {
 struct SearchV2EXIntent: AppIntent {
     static let title: LocalizedStringResource = "搜索 V2EX"
     static let description = IntentDescription("搜索 V2EX 的话题、回复、用户或节点。")
+    @available(iOS 26.0, *)
     static var supportedModes: IntentModes { .foreground }
 
     @Parameter(title: "关键词")
@@ -41,6 +44,7 @@ struct SearchV2EXIntent: AppIntent {
 struct OpenV2EXFavoritesIntent: AppIntent {
     static let title: LocalizedStringResource = "打开 V2EX 收藏"
     static let description = IntentDescription("查看收藏的 V2EX 话题。")
+    @available(iOS 26.0, *)
     static var supportedModes: IntentModes { .foreground }
 
     func perform() async throws -> some IntentResult & OpensIntent {
