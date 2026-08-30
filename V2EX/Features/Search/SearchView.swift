@@ -82,12 +82,13 @@ struct SearchView: View {
             .background(Theme.canvas)
             .navigationTitle("搜索")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $model.query, prompt: "话题、回复、用户或节点")
-            .searchScopes($model.scope) {
-                ForEach(SearchViewModel.Scope.allCases) { scope in
-                    Text(scope.title).tag(scope)
-                }
-            }
+            // iPad 上系统默认的 searchable 把搜索框缩在导航栏右侧，很怪；
+            // 用 drawer 模式让搜索框全宽居中，和节点页一致。
+            .searchable(
+                text: $model.query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "话题、回复、用户或节点"
+            )
             .searchFocused($searchFocused)
             .onSubmit(of: .search) { submit() }
             .onChange(of: model.scope) {
@@ -108,10 +109,23 @@ struct SearchView: View {
     private var results: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
+                // scope 选择器自己画：系统 searchScopes 在 iPad drawer
+                // 模式下不渲染，换成首页分类栏同款 chips，各端一致。
+                scopeBar
+
                 if model.isSearching {
                     LoadingCard()
                 } else if let message = model.errorMessage {
                     EmptyStateCard(icon: "magnifyingglass", title: "没有结果", message: message)
+                } else if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            && !model.hasSearched {
+                    // 首屏空态：搜索框聚焦着但还没输入，别让整页空白得
+                    // 像没加载出来，放一句引导。
+                    EmptyStateCard(
+                        icon: "magnifyingglass",
+                        title: "搜索 V2EX 社区",
+                        message: "输入关键词，搜索话题、回复、用户或节点。索引来自 sov2ex。"
+                    )
                 } else {
                     switch model.scope {
                     case .topics, .replies: hitList
@@ -130,6 +144,16 @@ struct SearchView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
+    }
+
+    /// 话题 / 回复 / 用户 / 节点 四个搜索域，chips 形式。
+    private var scopeBar: some View {
+        ChipRail(items: SearchViewModel.Scope.allCases, selected: model.scope) { scope in
+            FilterChip(title: scope.title, isSelected: model.scope == scope) {
+                model.scope = scope
+            }
+            .id(scope)
+        }
     }
 
     /// 屏蔽与举报同样作用于搜索结果 —— 漏了这里，被屏蔽的人搜一下就又
