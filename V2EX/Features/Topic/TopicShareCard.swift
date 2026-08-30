@@ -188,7 +188,7 @@ struct TopicShareCard: View {
             .padding(.vertical, 3)
             .background(Theme.accentSoft, in: Capsule())
 
-            Text(summary)
+            Text(TopicSummaryMarkdown.attributed(summary))
                 .font(.system(size: 14))
                 .lineSpacing(5)
                 .foregroundStyle(Theme.body)
@@ -471,7 +471,7 @@ struct TopicShareLinkSheet: View {
                         .disabled(summaryModel.isGenerating)
                 }
 
-                Text(summary)
+                Text(TopicSummaryMarkdown.attributed(summary))
                     .font(.system(size: 14))
                     .lineSpacing(4)
                     .foregroundStyle(Theme.body)

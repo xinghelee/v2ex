@@ -2,6 +2,43 @@ import Foundation
 import FoundationModels
 import SwiftUI
 
+/// Converts the small Markdown subset emitted by summary providers into a
+/// SwiftUI-native attributed string. Inline parsing preserves the model's line
+/// breaks, while normalizing block markers prevents headings and list bullets
+/// from leaking into the visible text.
+enum TopicSummaryMarkdown {
+    static func attributed(_ source: String) -> AttributedString {
+        let normalized = source
+            .components(separatedBy: .newlines)
+            .map(normalizeBlockMarker)
+            .joined(separator: "\n")
+
+        return (try? AttributedString(
+            markdown: normalized,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(source)
+    }
+
+    private static func normalizeBlockMarker(_ line: String) -> String {
+        let indentation = line.prefix { $0 == " " || $0 == "\t" }
+        let content = line.dropFirst(indentation.count)
+
+        if content.hasPrefix("- ") || content.hasPrefix("* ") || content.hasPrefix("+ ") {
+            return "\(indentation)• \(content.dropFirst(2))"
+        }
+
+        let headingMarks = content.prefix { $0 == "#" }
+        if !headingMarks.isEmpty,
+           headingMarks.count <= 6,
+           content.dropFirst(headingMarks.count).hasPrefix(" ") {
+            let title = content.dropFirst(headingMarks.count + 1)
+            return "\(indentation)**\(title)**"
+        }
+
+        return line
+    }
+}
+
 /// A user-triggered summary for long V2EX discussions.
 ///
 /// Apple Intelligence runs on-device. When unavailable, users may opt into an
@@ -182,7 +219,7 @@ struct TopicAISummaryCard: View {
                 }
 
                 if let summary = model.summary {
-                    Text(summary)
+                    Text(TopicSummaryMarkdown.attributed(summary))
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.body)
                         .lineSpacing(4)
