@@ -262,7 +262,12 @@ struct RootView: View {
         case "home":
             selection = .home
             paths[.home] = NavigationPath()
-            let feed: HomeViewModel.Feed = path.first == "hot" ? .hot : .all
+            let feed: HomeViewModel.Feed
+            switch path.first?.lowercased() {
+            case "hot": feed = .hot
+            case "r2": feed = .r2
+            default: feed = .all
+            }
             homeRequest = HomeOpenRequest(feed: feed)
         case "search":
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?
