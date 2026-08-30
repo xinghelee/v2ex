@@ -1,5 +1,4 @@
 import Foundation
-import StoreKit
 import SwiftUI
 
 enum AppInfo {
@@ -83,7 +82,7 @@ final class UpdateChecker: ObservableObject {
         guard !hasChecked else { return }
         hasChecked = true
 
-        guard await Self.isTestFlightBuild else { return }
+        guard Self.isTestFlightBuild else { return }
 
         do {
             var request = URLRequest(url: Self.releaseURL)
@@ -129,14 +128,15 @@ final class UpdateChecker: ObservableObject {
     }
 
     private static var isTestFlightBuild: Bool {
-        get async {
-            do {
-                guard case .verified(let transaction) = try await AppTransaction.shared else { return false }
-                return transaction.environment == .sandbox
-            } catch {
-                return false
-            }
+        // TestFlight 安装的构建会带沙盒票据（_MASReceipt/sandboxReceipt 文件），
+        // App Store / Debug 构建没有。用这个经典启发式判断即可，不要调用
+        // StoreKit 2 的 AppTransaction——那会在无 Apple ID 的模拟器/设备上
+        // 触发「Sign in to Apple Account」系统弹窗。
+        guard let receiptURL = Bundle.main.appStoreReceiptURL,
+              FileManager.default.fileExists(atPath: receiptURL.path) else {
+            return false
         }
+        return receiptURL.lastPathComponent == "sandboxReceipt"
     }
 }
 

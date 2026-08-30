@@ -2,7 +2,7 @@
 
 > Way to Explore
 
-面向个人使用的 V2EX iOS 客户端，支持 **iPhone 与 iPad**。使用 SwiftUI 构建，采用 iOS 26 原生 Liquid Glass 组件，数据来自 V2EX API、网页会话和 sov2ex 搜索。iPad 上列表与正文收窄为居中的可读栏宽，横竖屏均可使用。
+面向个人使用的 V2EX iOS 客户端，支持 **iPhone 与 iPad**，最低 iOS 18。使用 SwiftUI 构建，在 iOS 26 上启用原生 Liquid Glass 组件（低版本自动降级为磨砂材质），数据来自 V2EX API、网页会话和 sov2ex 搜索。iPad 上列表与正文收窄为居中的可读栏宽，横竖屏均可使用。
 
 ## 下载
 
@@ -40,7 +40,7 @@
 | API 2.0 | Personal Access Token：通知、个人资料、长帖分页、删除通知 |
 | 网页会话 | App 内回复、收藏同步、关注节点同步；Cookie 只存储在 Keychain |
 | sov2ex | 社区全文索引，V2EX 无官方搜索接口 |
-| iOS 26 | 原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起 |
+| iOS 26 | 原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起；低版本经 `iOS26Compat` 自动降级（`safeAreaInset`、`ultraThinMaterial`、`borderedProminent`） |
 | iOS 27 | Foundation Models 设备端摘要、App Intents/Siri 深链与 Spotlight 语义入口（渐进增强） |
 | AI 回退 | 用户可选配置 DeepSeek、硅基流动、OpenAI 或任意 OpenAI 兼容 API；Key 仅存 Keychain |
 | 多设备 | iPhone 竖屏、iPad 全方向；宽屏内容自动居中为 720pt 可读栏 |

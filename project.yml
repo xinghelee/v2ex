@@ -2,10 +2,10 @@ name: V2EX
 options:
   bundleIdPrefix: com.vibe
   deploymentTarget:
-    # The design is explicitly iOS 26 Liquid Glass, so we target the real APIs
-    # (glassEffect, GlassEffectContainer, native floating tab bar) rather than
-    # approximating them with materials.
-    iOS: "26.0"
+    # iOS 26 的 Liquid Glass 体验通过兼容层（DesignSystem/iOS26Compat.swift）保留：
+    # iOS 26 原生 glassEffect / safeAreaBar / 悬浮标签栏，iOS 18+ 自动降级为
+    # ultraThinMaterial / safeAreaInset / 普通标签栏。
+    iOS: "18.0"
   createIntermediateGroups: true
   generateEmptyDirectories: false
 
