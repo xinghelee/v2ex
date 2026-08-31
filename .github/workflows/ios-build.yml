@@ -1,35 +1,19 @@
+# 备用出包通道（来自 #1，改为仅手动触发）：
+# 日常构建走 Xcode Cloud（每次推 main 自动构建并分发 TestFlight），
+# 这里只在需要临时出一个未签名 IPA 时手动跑——macOS runner 分钟计费
+# 是 Linux 的 10 倍，不值得每次推送都烧。
 name: Build iOS App
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "V2EX/**"
-      - "V2EX.xcodeproj/**"
-      - "project.yml"
-      - ".github/workflows/ios-build.yml"
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "V2EX/**"
-      - "V2EX.xcodeproj/**"
-      - "project.yml"
-      - ".github/workflows/ios-build.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ios-build-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
-    runs-on: xcode-27
-    timeout-minutes: 20
+    runs-on: macos-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
