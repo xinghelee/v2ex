@@ -2,8 +2,9 @@ import SwiftUI
 import WebKit
 
 /// 网页登录容器：内嵌 WKWebView 加载 v2ex.com/signin，用户像用浏览器一样
-/// 登录（验证码、两步验证都正常）。登录成功后（URL 离开 /signin、/2fa），
-/// 从 WebView 抓取完整会话 cookie 交给 `V2EXSessionStore`。
+/// 登录（验证码、两步验证都正常）。判定成功的唯一标准是拿 WebView 的 cookie
+/// 请求 `/settings` 能停在 `/settings`——页面长得像已登录不算数，两步验证没走完
+/// 时页面同样是那个样子。确认后把完整会话 cookie 交给 `V2EXSessionStore`。
 struct WebLoginView: UIViewRepresentable {
     /// 登录成功回调：cookie 字符串 + 用户名（从页面提取）。
     var onLoggedIn: (String, String) -> Void
@@ -71,6 +72,14 @@ struct WebLoginView: UIViewRepresentable {
         private func detectLogin(in webView: WKWebView, retriesRemaining: Int) {
             let host = webView.url?.host?.lowercased()
             guard host == "v2ex.com" || host == "www.v2ex.com" else { return }
+            // 两步验证页顶部已经渲染登录态导航，会话却只是半登录——而且它的表单
+            // action 是 /2fa、验证码输入框不是 password，下面的 loginFormVisible
+            // 一个都探测不到。在这里判成功会把一个发不了帖的 cookie 存进 Keychain，
+            // 所以这个路径直接跳过；用户提交验证码离开本页后自然会再触发一次。
+            guard webView.url?.path != "/2fa" else {
+                setVerifying(false)
+                return
+            }
             guard !notified, !isChecking else { return }
             isChecking = true
 
@@ -83,15 +92,12 @@ struct WebLoginView: UIViewRepresentable {
                         var top = link.getBoundingClientRect().top;
                         return !!inHeader || (top >= 0 && top < 180);
                     });
-                    var signOut = document.querySelector('a[href*="/signout"]');
-                    var notifications = document.querySelector('a[href^="/notifications"]');
                     var avatar = member ? member.querySelector('img[alt]') : null;
                     var identity = member
                         ? (avatar ? avatar.getAttribute('alt') : member.getAttribute('href'))
                         : '';
                     return {
                         loginFormVisible: !!loginForm,
-                        signedInUIVisible: !loginForm && !!(member || signOut || notifications),
                         identity: identity || ''
                     };
                 })()
@@ -99,7 +105,6 @@ struct WebLoginView: UIViewRepresentable {
                 guard let self, let webView, !self.notified else { return }
                 let page = result as? [String: Any]
                 let loginFormVisible = page?["loginFormVisible"] as? Bool ?? true
-                let signedInUIVisible = page?["signedInUIVisible"] as? Bool ?? false
                 let username = (page?["identity"] as? String ?? "")
                     .replacingOccurrences(of: "/member/", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -119,12 +124,9 @@ struct WebLoginView: UIViewRepresentable {
                             .map { "\($0.name)=\($0.value)" }
                             .joined(separator: "; ")
 
-                        if signedInUIVisible, !cookie.isEmpty {
-                            self.notified = true
-                            self.parent.onLoggedIn(cookie, username)
-                            return
-                        }
-
+                        // 登录表单消失只说明离开了表单页，页面顶部出现登录态导航也
+                        // 只是「看起来像」——两步验证没走完时同样是这个样子。会话是否
+                        // 真的可用一律以能否停在 /settings 为准，别用页面外观下结论。
                         guard !loginFormVisible, !cookie.isEmpty else {
                             self.scheduleRetry(
                                 in: webView,

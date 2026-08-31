@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// 两步验证未完成前的临时会话。cookie 只在内存里传给验证弹层——一旦写进
+/// Keychain，`isLoggedIn` 就是 true，这个发不了帖的半登录状态会跟着重启一直留着。
+private struct PendingTwoFactor: Identifiable {
+    let id = UUID()
+    let cookie: String
+    let username: String
+}
+
 /// V2EX 网页登录：账号密码 + 验证码，成功后把会话 cookie 存进 Keychain。
 /// 官方 API 没有发帖/回复接口，只有网页表单能写——登录一次即可在 app 内
 /// 直接回复，不用跳浏览器。
@@ -13,7 +21,7 @@ struct V2EXLoginView: View {
     @State private var captchaImage: Data?
     @State private var captchaLoadFailed = false
     @State private var challenge: V2EXClient.SignInChallenge?
-    @State private var needsTwoFactor = false
+    @State private var pendingTwoFactor: PendingTwoFactor?
     @State private var isBusy = false
     @State private var errorMessage: String?
     @State private var showWebLogin = false
@@ -56,9 +64,10 @@ struct V2EXLoginView: View {
         .navigationBarTitleDisplayMode(.large)
         // 设置是一条向下钻的支线，底部标签栏留着只会诱人半路跳走。
         .toolbar(.hidden, for: .tabBar)
-        // 两步验证直接弹出，不留在页面里。
-        .sheet(isPresented: $needsTwoFactor) {
-            TwoFactorSheet(onDone: { dismiss() })
+        // 两步验证直接弹出，不留在页面里。下滑关掉只是放弃这次登录——
+        // 此时还没有任何东西落库，不会留下半登录状态。
+        .sheet(item: $pendingTwoFactor) { pending in
+            TwoFactorSheet(pending: pending, onDone: { dismiss() })
         }
         // 网页登录：底部弹窗。
         .sheet(isPresented: $showWebLogin, onDismiss: {
@@ -270,15 +279,18 @@ struct V2EXLoginView: View {
                 password: password,
                 captcha: captcha
             )
-            session.save(cookie: result.cookie, username: result.username)
             if result.needsTwoFactor {
-                needsTwoFactor = true
+                // 密码这步只换来一个半登录会话，验证码没过之前不能存。
+                pendingTwoFactor = PendingTwoFactor(
+                    cookie: result.cookie,
+                    username: result.username
+                )
                 errorMessage = nil
             } else if await V2EXClient.shared.verifySession(cookie: result.cookie) {
+                session.save(cookie: result.cookie, username: result.username)
                 dismiss()
             } else {
-                // 会话验证失败：不保存无效状态。
-                session.clear()
+                // 会话验证失败：什么都没存，直接让用户重来。
                 errorMessage = "登录状态验证失败，请重试"
                 await loadCaptcha()
             }
@@ -293,6 +305,9 @@ struct V2EXLoginView: View {
 /// 两步验证弹出层：登录（账号/密码/验证码）通过后，如果账号开启了 2FA，
 /// 用这个 sheet 输入 TOTP 码，完成后再关闭整个登录页。
 private struct TwoFactorSheet: View {
+    /// 密码步换来的半登录会话，只存在于内存里。
+    let pending: PendingTwoFactor
+
     @EnvironmentObject private var session: V2EXSessionStore
     @Environment(\.dismiss) private var dismiss
 
@@ -352,7 +367,6 @@ private struct TwoFactorSheet: View {
             }
 
             Button("返回重新登录") {
-                session.clear()
                 dismiss()
             }
             .font(.system(size: 14, weight: .medium))
@@ -371,26 +385,24 @@ private struct TwoFactorSheet: View {
         errorMessage = nil
         defer { isBusy = false }
         do {
-            let once = try await V2EXClient.shared.twoFactorOnce(cookie: session.cookie)
+            let once = try await V2EXClient.shared.twoFactorOnce(cookie: pending.cookie)
             guard let freshCookie = try await V2EXClient.shared.signInTwoFactor(
-                code: code, once: once, cookie: session.cookie
+                code: code, once: once, cookie: pending.cookie
             ) else {
                 errorMessage = "两步验证码不正确。请检查身份验证器的手机时间是否准确（TOTP 依赖时钟同步），然后重试。"
                 code = ""
                 return
             }
-            // 2FA 通过后 V2EX 刷新了会话 —— 用新 cookie 更新登录状态。
-            session.save(cookie: freshCookie, username: session.username)
-            if await V2EXClient.shared.verifySession(cookie: freshCookie) {
-                dismiss()
-                onDone()
-            } else {
-                session.clear()
+            // 2FA 通过后 V2EX 刷新了会话 —— 用新 cookie 再确认一次，通过才落库。
+            guard await V2EXClient.shared.verifySession(cookie: freshCookie) else {
                 errorMessage = "两步验证通过但会话验证失败，请重新登录"
+                return
             }
+            session.save(cookie: freshCookie, username: pending.username)
+            dismiss()
+            onDone()
         } catch {
             if case V2EXError.sessionExpired = error {
-                session.clear()
                 errorMessage = "两步验证会话已过期，请重新登录"
             } else {
                 errorMessage = (error as? V2EXError)?.errorDescription ?? error.localizedDescription
