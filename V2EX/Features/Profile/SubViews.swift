@@ -798,6 +798,7 @@ struct OfflineListView: View {
 
 struct MyPostsView: View {
     @EnvironmentObject private var token: TokenStore
+    @EnvironmentObject private var session: V2EXSessionStore
     @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var moderation: ModerationStore
     @State private var topics: [V2Topic] = []
@@ -806,6 +807,9 @@ struct MyPostsView: View {
     @State private var errorMessage: String?
 
     private var visibleTopics: [V2Topic] { moderation.filter(topics) }
+
+    /// 任一凭证都能定位「我自己」：token 走 API 2.0，网页会话直接有用户名。
+    private var isConnected: Bool { token.hasToken || session.isLoggedIn }
 
     var body: some View {
         ScrollView {
@@ -817,7 +821,7 @@ struct MyPostsView: View {
                     message: username.isEmpty ? "连接账号后查看自己发布的内容。" : "@\(username) 最近发布的话题。"
                 )
 
-                if !token.hasToken {
+                if !isConnected {
                     EmptyStateCard(
                         icon: "key",
                         title: "需要 Access Token",
@@ -864,12 +868,12 @@ struct MyPostsView: View {
         .navigationTitle("我的话题")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .task(id: token.token) { await load() }
+        .task(id: token.token + "|" + session.username) { await load() }
         .pullToRefresh { await load(force: true) }
     }
 
     private func load(force: Bool = false) async {
-        guard token.hasToken else {
+        guard isConnected else {
             topics = []
             username = ""
             errorMessage = nil
@@ -882,9 +886,15 @@ struct MyPostsView: View {
         defer { isLoading = false }
 
         do {
-            let member = try await V2EXClient.shared.currentMember(token: token.token)
-            username = member.username
-            topics = try await V2EXClient.shared.topics(byMember: member.username)
+            // token 在手就问 API 2.0 要当前用户名；只有网页会话时登录流程
+            // 已经把用户名存下来了，直接用。
+            if token.hasToken {
+                let member = try await V2EXClient.shared.currentMember(token: token.token)
+                username = member.username
+            } else {
+                username = session.username
+            }
+            topics = try await V2EXClient.shared.topics(byMember: username)
         } catch {
             errorMessage = (error as? V2EXError)?.errorDescription ?? error.localizedDescription
         }

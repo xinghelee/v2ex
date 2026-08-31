@@ -7,18 +7,26 @@ final class ProfileViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var loadFailed = false
 
-    func load(token: String) async {
+    func load(token: String, sessionUsername: String) async {
         isLoading = true
         loadFailed = false
         defer { isLoading = false }
 
-        guard !token.isEmpty else {
+        guard !token.isEmpty || !sessionUsername.isEmpty else {
             member = nil
             recentTopics = []
             return
         }
         do {
-            let fresh = try await V2EXClient.shared.currentMember(token: token)
+            // Access Token 走 API 2.0 拿当前用户；只有网页会话（cookie）时用
+            // 公开的 v1 接口按用户名查。两种凭证任占其一都算已连接——网页
+            // 登录成功后资料页不该还把人当访客（真机反馈踩过这个坑）。
+            let fresh: V2Member
+            if !token.isEmpty {
+                fresh = try await V2EXClient.shared.currentMember(token: token)
+            } else {
+                fresh = try await V2EXClient.shared.member(username: sessionUsername)
+            }
             member = fresh
             recentTopics = (try? await V2EXClient.shared.topics(byMember: fresh.username)) ?? []
         } catch {
@@ -32,12 +40,16 @@ final class ProfileViewModel: ObservableObject {
 struct ProfileView: View {
     @StateObject private var model = ProfileViewModel()
     @EnvironmentObject private var token: TokenStore
+    @EnvironmentObject private var session: V2EXSessionStore
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var offline: OfflineStore
     @EnvironmentObject private var radar: RadarStore
     @EnvironmentObject private var moderation: ModerationStore
     @EnvironmentObject private var history: HistoryStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    /// 已连接 = 任一凭证在手：Access Token（只读 API）或网页会话（回复）。
+    private var isConnected: Bool { token.hasToken || session.isLoggedIn }
 
     private var metricColumns: [GridItem] {
         let count = horizontalSizeClass == .regular ? 4 : 2
@@ -65,7 +77,7 @@ struct ProfileView: View {
         }
         .scrollIndicators(.hidden)
         .softBottomEdgeEffect()
-        .pullToRefresh { await model.load(token: token.token) }
+        .pullToRefresh { await model.load(token: token.token, sessionUsername: session.username) }
         .background(Theme.canvas)
         .navigationTitle("我的")
         .navigationBarTitleDisplayMode(.inline)
@@ -77,27 +89,27 @@ struct ProfileView: View {
                 .accessibilityLabel("设置")
             }
         }
-        .task(id: token.token) { await model.load(token: token.token) }
+        .task(id: token.token + "|" + session.username) { await model.load(token: token.token, sessionUsername: session.username) }
     }
 
     // MARK: - Account
 
     @ViewBuilder
     private var accountSection: some View {
-        if token.hasToken, let member = model.member {
+        if isConnected, let member = model.member {
             profileCard(member)
-        } else if token.hasToken, model.isLoading {
+        } else if isConnected, model.isLoading {
             LoadingCard()
-        } else if token.hasToken, model.loadFailed {
+        } else if isConnected, model.loadFailed {
             EmptyStateCard(
                 icon: "wifi.exclamationmark",
                 title: "没能加载个人资料",
                 message: "网络或接口暂时不可用，你的登录状态没有改变。",
                 actionTitle: "重试"
             ) {
-                Task { await model.load(token: token.token) }
+                Task { await model.load(token: token.token, sessionUsername: session.username) }
             }
-        } else if token.hasToken {
+        } else if isConnected {
             // Avoid flashing the signed-out CTA for one frame before the task
             // flips isLoading on a connected account.
             LoadingCard()
@@ -235,7 +247,7 @@ struct ProfileView: View {
                     icon: "square.text.square.fill",
                     count: model.recentTopics.count,
                     title: "我的话题",
-                    caption: token.hasToken ? "最近发布" : "连接后查看",
+                    caption: isConnected ? "最近发布" : "连接后查看",
                     route: .myPosts
                 )
             }
