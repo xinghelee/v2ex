@@ -148,7 +148,9 @@ struct NodeDetailView: View {
                     IdentitySquare(
                         text: model.node?.title ?? nodeName,
                         size: 56,
-                        imageURL: model.node?.avatarURL
+                        imageURL: model.node?.avatarURL,
+                        color: .clear,
+                        fallbackForeground: Theme.accent
                     )
                     VStack(alignment: .leading, spacing: 2) {
                         Text(model.node?.title ?? NodeCatalog.displayName(for: nodeName))

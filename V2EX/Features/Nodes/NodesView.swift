@@ -184,7 +184,8 @@ struct NodesView: View {
                     text: title,
                     size: 34,
                     imageURL: node?.avatarURL,
-                    color: .clear
+                    color: .clear,
+                    fallbackForeground: Theme.accent
                 )
                     .accessibilityHidden(true)
                 Text(title)

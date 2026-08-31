@@ -253,6 +253,7 @@ struct IdentitySquare: View {
     var size: CGFloat = 34
     var imageURL: URL?
     var color: Color?
+    var fallbackForeground: Color = .white
 
     private var initials: String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
@@ -275,7 +276,7 @@ struct IdentitySquare: View {
             )
             Text(initials)
                 .font(.system(size: size * 0.38, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(fallbackForeground)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
             if let imageURL {

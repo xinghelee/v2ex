@@ -372,7 +372,7 @@ struct ProfileView: View {
             GroupHeader(title: "我的空间", trailing: libraryCount > 0 ? "\(libraryCount) 项" : nil)
             CardSection {
                 libraryRow(
-                    icon: "star.fill",
+                    icon: "star",
                     count: favorites.topics.count,
                     title: "收藏",
                     caption: "喜欢的话题",
@@ -381,7 +381,7 @@ struct ProfileView: View {
                 RowSeparator(leadingInset: 68)
 
                 libraryRow(
-                    icon: "clock.arrow.circlepath",
+                    icon: "clock",
                     count: history.entries.count,
                     title: "浏览历史",
                     caption: "最近 \(HistoryStore.retentionDays) 天",
@@ -390,7 +390,7 @@ struct ProfileView: View {
                 RowSeparator(leadingInset: 68)
 
                 libraryRow(
-                    icon: "arrow.down.circle.fill",
+                    icon: "bookmark",
                     count: offline.bundles.count,
                     title: "稍后读",
                     caption: offline.bundles.isEmpty ? "离线资料库" : offline.formattedSize,
@@ -399,7 +399,7 @@ struct ProfileView: View {
                 RowSeparator(leadingInset: 68)
 
                 libraryRow(
-                    icon: "square.text.square.fill",
+                    icon: "doc.text",
                     count: model.recentTopics.count,
                     title: "我的话题",
                     caption: isConnected ? "最近发布" : "连接后查看",
@@ -419,6 +419,7 @@ struct ProfileView: View {
         NavigationLink(value: route) {
             HStack(spacing: 14) {
                 Image(systemName: icon)
+                    .symbolRenderingMode(.monochrome)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.accent)
                     .frame(width: 36, height: 36)
