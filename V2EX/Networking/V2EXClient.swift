@@ -134,7 +134,8 @@ actor V2EXClient {
     /// </tr></table></div>
     /// ```
     /// 切块标记不带收尾的 `>`：桌面版是 `<div class="cell item" style="">`，移动版是
-    /// `<div class="cell item">`，两套模板都要能切开。块内作者和「最后回复者」用的是
+    /// `<div class="cell item">`，两套模板都要能切开。双属性的行内正则用前瞻断言，
+    /// 属性顺序无关（写法来自 #1），V2EX 调换 href/class 顺序也不受影响。块内作者和「最后回复者」用的是
     /// 同一种 `<strong><a href="/member/…">` 标记，只有按出现顺序取第一个才不会认错人。
     /// 正文网页列表不提供，`content` 留空——只影响首条大卡片的摘要行。
     private static func topicRows(from html: String) -> [V2Topic] {
@@ -144,17 +145,17 @@ actor V2EXClient {
         for block in html.components(separatedBy: #"<div class="cell item""#).dropFirst() {
             guard let title = matches(
                 in: block,
-                pattern: #"<a href="/t/(\d+)(?:#[^"]*)?"[^>]*class="[^"]*topic-link[^"]*"[^>]*>([\s\S]*?)</a>"#,
+                pattern: #"<a(?=[^>]*\bhref="/t/(\d+)(?:#[^"]*)?")(?=[^>]*\bclass="[^"]*\btopic-link\b[^"]*")[^>]*>([\s\S]*?)</a>"#,
                 groupCount: 2
             ).first, let id = Int(title[1]), seen.insert(id).inserted else { continue }
 
             let node = matches(
                 in: block,
-                pattern: #"<a class="node" href="/go/([^"]+)">([^<]*)</a>"#,
+                pattern: #"<a(?=[^>]*\bclass="[^"]*\bnode\b[^"]*")(?=[^>]*\bhref="/go/([^"]+)")[^>]*>([^<]*)</a>"#,
                 groupCount: 2
             ).first
             let author = htmlField(block, pattern: #"<strong><a href="/member/([^"]+)">"#)
-            let avatar = htmlField(block, pattern: #"<img src="([^"]+)"[^>]*class="avatar""#)
+            let avatar = htmlField(block, pattern: #"<img(?=[^>]*\bclass="[^"]*\bavatar\b[^"]*")(?=[^>]*\bsrc="([^"]+)")[^>]*>"#)
             let replies = htmlField(block, pattern: #"class="count_[a-z]+"[^>]*>(\d+)"#).flatMap(Int.init)
             // 桌面版把绝对时间放在 title 里，直接用；移动版只有相对文案，反推近似值。
             let touched = htmlField(block, pattern: #"<span title="([^"]+)">"#)
@@ -970,129 +971,18 @@ extension V2EXClient {
 
     /// R2 是 V2EX 网页端基于投票计算的首页排序，不是节点。
     /// API 1.0 的 latest/hot 接口会忽略 `tab=r2`，API 2.0 也没有 tabs
-    /// 接口，因此这里读取公开网页中的主题列表；主题详情仍走现有 API。
+    /// 接口，因此和最热一样抓公开网页；主题详情仍走现有 API。
     func r2Topics() async throws -> [V2Topic] {
-        // R2 页面会被 CDN 短暂缓存；独立的查询参数让下拉刷新能拿到新排序。
-        let cacheBuster = Int(Date().timeIntervalSince1970 * 1_000)
-        let html = try await webHTML(path: "/?tab=r2&_=\(cacheBuster)")
-        let topics = Self.parseR2Topics(from: html)
+        let html = try await webHTML(path: "/?tab=r2", userAgent: Self.desktopUserAgent)
+        let topics = Self.topicRows(from: html)
+        // R2 没有 API 可兜底，解析被改版打残时明确报错好过静默空屏。
         guard !topics.isEmpty else {
             throw V2EXError.decoding("R2 页面没有返回话题")
         }
+        Self.log("r2Topics: rows=\(topics.count) len=\(html.count)")
         return topics
     }
 
-    /// Parses the topic rows rendered by `/?tab=r2` without depending on the
-    /// page's localized relative-time labels. The absolute timestamp is in the
-    /// activity span's `title` attribute.
-    nonisolated static func parseR2Topics(from html: String) -> [V2Topic] {
-        let topicPattern = #"<a(?=[^>]*\bhref="/t/(\d+)(?:#[^"]*)?")[^>]*\bclass="[^"]*\btopic-link\b[^"]*"[^>]*>([\s\S]*?)</a>"#
-        guard let regex = try? NSRegularExpression(pattern: topicPattern) else { return [] }
-        let fullRange = NSRange(html.startIndex..., in: html)
-        let matches = regex.matches(in: html, range: fullRange)
-        let rowMarker = #"<div class="cell item""#
-
-        return matches.enumerated().compactMap { index, match in
-            guard let idRange = Range(match.range(at: 1), in: html),
-                  let titleRange = Range(match.range(at: 2), in: html),
-                  let linkRange = Range(match.range(at: 0), in: html),
-                  let rowStart = html.range(
-                      of: rowMarker,
-                      options: .backwards,
-                      range: html.startIndex..<linkRange.lowerBound
-                  ) else { return nil }
-
-            let rowEnd: String.Index
-            if index + 1 < matches.count,
-               let nextLinkRange = Range(matches[index + 1].range(at: 0), in: html) {
-                rowEnd = nextLinkRange.lowerBound
-            } else {
-                rowEnd = html.endIndex
-            }
-            let row = String(html[rowStart.lowerBound..<rowEnd])
-            let id = Int(html[idRange]) ?? 0
-            let title = HTMLText.plain(String(html[titleRange]))
-
-            let nodeMatch = Self.matches(
-                in: row,
-                pattern: #"<a(?=[^>]*\bclass="[^"]*\bnode\b[^"]*")(?=[^>]*\bhref="/go/([^"]+)")[^>]*>([\s\S]*?)</a>"#,
-                groupCount: 2
-            ).first
-            let memberMatch = Self.matches(
-                in: row,
-                pattern: #"<strong>\s*<a(?=[^>]*\bhref="/member/([^"]+)")[^>]*>([\s\S]*?)</a>\s*</strong>"#,
-                groupCount: 2
-            ).first
-            guard id > 0,
-                  !title.isEmpty,
-                  let nodeMatch,
-                  let memberMatch else { return nil }
-
-            let nodeName = nodeMatch[1]
-            let nodeTitle = HTMLText.plain(nodeMatch[2])
-            let username = HTMLText.plain(memberMatch[2])
-            guard !nodeName.isEmpty, !username.isEmpty else { return nil }
-
-            let avatar = Self.htmlField(
-                row,
-                pattern: #"<img(?=[^>]*\bclass="[^"]*\bavatar\b[^"]*")(?=[^>]*\bsrc="([^"]+)")[^>]*>"#
-            ).flatMap { HTMLText.absoluteURL($0)?.absoluteString }
-            let activity = Self.htmlField(
-                row,
-                pattern: #"<span class="topic_info">[\s\S]*?<span[^>]*\btitle="([^"]+)"[^>]*>"#
-            )
-            let replies = Self.htmlField(
-                row,
-                pattern: #"<a(?=[^>]*\bclass="[^"]*\bcount_[^"]*")[^>]*>([\d,]+)</a>"#
-            ).flatMap { Int($0.replacingOccurrences(of: ",", with: "")) } ?? 0
-
-            let node = V2Node.stub(
-                name: nodeName,
-                title: nodeTitle.isEmpty ? nodeName : nodeTitle
-            )
-            let member = V2Member(
-                id: nil,
-                username: username,
-                url: nil,
-                website: nil,
-                bio: nil,
-                tagline: nil,
-                location: nil,
-                github: nil,
-                created: nil,
-                avatar: avatar,
-                avatarLarge: nil,
-                avatarNormal: nil
-            )
-            return V2Topic(
-                id: id,
-                title: title,
-                content: nil,
-                contentRendered: nil,
-                url: "https://www.v2ex.com/t/\(id)",
-                replies: replies,
-                created: nil,
-                lastTouched: Self.unixTimestamp(from: activity),
-                lastReplyBy: nil,
-                node: node,
-                member: member
-            )
-        }
-    }
-
-    private nonisolated static func unixTimestamp(from raw: String?) -> Int? {
-        guard let raw, !raw.isEmpty else { return nil }
-        let formats = ["yyyy-MM-dd HH:mm:ss xxxx", "yyyy-MM-dd HH:mm:ss Z"]
-        for format in formats {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.dateFormat = format
-            if let date = formatter.date(from: raw) {
-                return Int(date.timeIntervalSince1970)
-            }
-        }
-        return nil
-    }
 
     /// 网页「我收藏的节点」——API 2.0 没有关注节点接口，从 /my/nodes 抓取。
     /// 节点链接形如 `<a href="/go/programmer">程序员</a>`，href 就是 API 的
