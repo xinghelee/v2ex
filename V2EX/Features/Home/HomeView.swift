@@ -6,6 +6,7 @@ final class HomeViewModel: ObservableObject {
         case all
         case following
         case hot
+        case r2
         case node(name: String, title: String)
         /// 唯一的非 V2EX 数据源：自成一页，不与本站内容混排。
         case hackerNews
@@ -15,6 +16,7 @@ final class HomeViewModel: ObservableObject {
             case .all: return "全部"
             case .following: return "关注"
             case .hot: return "最热"
+            case .r2: return "R2"
             case .node(_, let title): return title
             case .hackerNews: return "HN"
             }
@@ -52,6 +54,8 @@ final class HomeViewModel: ObservableObject {
                 result = try await V2EXClient.shared.latestTopics()
             case .hot:
                 result = try await V2EXClient.shared.hotTopics()
+            case .r2:
+                result = try await V2EXClient.shared.r2Topics()
             case .node(let name, _):
                 result = try await V2EXClient.shared.topics(inNode: name)
             case .following:
@@ -123,7 +127,7 @@ struct HomeView: View {
     @State private var handledRequestID: UUID?
 
     private var feeds: [HomeViewModel.Feed] {
-        [.all, .hot, .following] + followed.names.prefix(8).map {
+        [.all, .hot, .r2, .following] + followed.names.prefix(8).map {
             .node(name: $0, title: NodeCatalog.displayName(for: $0))
         } + (settings.hackerNewsEnabled ? [.hackerNews] : [])
     }
@@ -264,7 +268,9 @@ struct HomeView: View {
                             CardSection(padding: 16) {
                                 FeaturedTopicCard(
                                     topic: featured,
-                                    badge: feed == .hot ? "今日最热" : "最新活跃"
+                                    badge: feed == .hot
+                                        ? "今日最热"
+                                        : feed == .r2 ? "R2 排序" : "最新活跃"
                                 )
                             }
                         }
@@ -439,7 +445,7 @@ private struct CommunityPulseCard: View {
 }
 
 extension HomeViewModel.Feed {
-    /// 固定项（全部/最热/关注/HN）不可拖，只有关注节点参与排序。
+    /// 固定项（全部/最热/R2/关注/HN）不可拖，只有关注节点参与排序。
     var isReorderable: Bool {
         if case .node = self { return true }
         return false

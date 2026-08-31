@@ -1,0 +1,88 @@
+name: Build iOS App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "V2EX/**"
+      - "V2EX.xcodeproj/**"
+      - "project.yml"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "V2EX/**"
+      - "V2EX.xcodeproj/**"
+      - "project.yml"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Verify Xcode toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Build unsigned iOS app
+        run: |
+          set -euo pipefail
+          BUILD_DIR="$RUNNER_TEMP/V2EX-iphoneos"
+          xcodebuild \
+            -project V2EX.xcodeproj \
+            -scheme V2EX \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/V2EX-DerivedData" \
+            CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/V2EX-iphoneos/V2EX.app"
+          IPA_DIR="$RUNNER_TEMP/V2EX-unsigned-ipa"
+          IPA_PATH="$RUNNER_TEMP/V2EX-unsigned.ipa"
+
+          test -d "$APP_PATH"
+          test ! -d "$APP_PATH/_CodeSignature"
+          test ! -f "$APP_PATH/embedded.mobileprovision"
+
+          rm -rf "$IPA_DIR" "$IPA_PATH"
+          mkdir -p "$IPA_DIR/Payload"
+          cp -R "$APP_PATH" "$IPA_DIR/Payload/"
+          (
+            cd "$IPA_DIR"
+            /usr/bin/zip -qry "$IPA_PATH" Payload
+          )
+
+          /usr/bin/unzip -l "$IPA_PATH"
+
+      - name: Upload unsigned IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: V2EX-unsigned-ipa-${{ github.sha }}
+          path: ${{ runner.temp }}/V2EX-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
