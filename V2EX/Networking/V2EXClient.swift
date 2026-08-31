@@ -107,32 +107,41 @@ actor V2EXClient {
         return try await getV1("/api/topics/hot.json")
     }
 
+    /// 桌面版 UA。V2EX 按 UA 分发两套模板，列表页差别很大：移动版只有「1 min ago」
+    /// 这样的相对时间文案和 24px 头像；桌面版每行带 `<span title="2026-08-31
+    /// 11:30:18 +08:00">` 的绝对时间戳和 48px 头像。时间戳能直接用，相对文案只能
+    /// 反推出一个近似值，所以列表抓取单独走桌面版。
+    private static let desktopUserAgent =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15"
+
     private func hotTopicsFromWeb() async throws -> [V2Topic] {
-        let html = try await webHTML(path: "/?tab=hot")
+        let html = try await webHTML(path: "/?tab=hot", userAgent: Self.desktopUserAgent)
         let rows = Self.topicRows(from: html)
         Self.log("hotTopicsFromWeb: rows=\(rows.count) len=\(html.count)")
         return rows
     }
 
-    /// 解析网页首页/节点页的话题行。实测结构（未登录）：
+    /// 解析网页首页/节点页的话题行。实测结构（桌面版，未登录）：
     /// ```
-    /// <div class="cell item"><table><tr>
-    ///   <td><a href="/member/foo"><img src="…_normal.png" class="avatar" …/></a></td>
-    ///   <td><span class="small fade"><a class="node" href="/go/career">职场话题</a>
-    ///       &nbsp;•&nbsp; <strong><a href="/member/foo">foo</a></strong></span>
-    ///     <span class="item_title"><a href="/t/123#reply22" class="topic-link">标题</a></span>
-    ///     <span class="small fade">2 mins ago &nbsp;•&nbsp; Lastly replied by …</span></td>
+    /// <div class="cell item" style=""><table><tr>
+    ///   <td><a href="/member/foo"><img src="…_large.png" class="avatar" …/></a></td>
+    ///   <td><span class="item_title"><a href="/t/123#reply22" class="topic-link">标题</a></span>
+    ///     <span class="topic_info"><a class="node" href="/go/career">职场话题</a>
+    ///       &nbsp;•&nbsp; <strong><a href="/member/foo">foo</a></strong>
+    ///       &nbsp;•&nbsp; <span title="2026-08-31 11:30:18 +08:00">2 mins ago</span>
+    ///       &nbsp;•&nbsp; Lastly replied by <strong><a href="/member/bar">bar</a></strong></span></td>
     ///   <td><a href="/t/123#reply22" class="count_livid">22</a></td>
     /// </tr></table></div>
     /// ```
-    /// 逐 cell 切块再取字段：同一块里作者和「最后回复者」用的是同一种
-    /// `<strong><a href="/member/…">` 标记，只有按出现顺序取第一个才不会认错人。
+    /// 切块标记不带收尾的 `>`：桌面版是 `<div class="cell item" style="">`，移动版是
+    /// `<div class="cell item">`，两套模板都要能切开。块内作者和「最后回复者」用的是
+    /// 同一种 `<strong><a href="/member/…">` 标记，只有按出现顺序取第一个才不会认错人。
     /// 正文网页列表不提供，`content` 留空——只影响首条大卡片的摘要行。
     private static func topicRows(from html: String) -> [V2Topic] {
         var topics: [V2Topic] = []
         var seen = Set<Int>()
 
-        for block in html.components(separatedBy: #"<div class="cell item">"#).dropFirst() {
+        for block in html.components(separatedBy: #"<div class="cell item""#).dropFirst() {
             guard let title = matches(
                 in: block,
                 pattern: #"<a href="/t/(\d+)(?:#[^"]*)?"[^>]*class="[^"]*topic-link[^"]*"[^>]*>([\s\S]*?)</a>"#,
@@ -147,8 +156,11 @@ actor V2EXClient {
             let author = htmlField(block, pattern: #"<strong><a href="/member/([^"]+)">"#)
             let avatar = htmlField(block, pattern: #"<img src="([^"]+)"[^>]*class="avatar""#)
             let replies = htmlField(block, pattern: #"class="count_[a-z]+"[^>]*>(\d+)"#).flatMap(Int.init)
-            let touched = htmlField(block, pattern: #"<span class="small fade">([^<]+?)(?:&nbsp;|</span>)"#)
-                .flatMap(timestamp(fromRelative:))
+            // 桌面版把绝对时间放在 title 里，直接用；移动版只有相对文案，反推近似值。
+            let touched = htmlField(block, pattern: #"<span title="([^"]+)">"#)
+                .flatMap(timestamp(fromAbsolute:))
+                ?? htmlField(block, pattern: #"<span class="small fade">([^<]+?)(?:&nbsp;|</span>)"#)
+                    .flatMap(timestamp(fromRelative:))
 
             topics.append(V2Topic(
                 id: id,
@@ -172,17 +184,38 @@ actor V2EXClient {
         return topics
     }
 
-    /// 列表 HTML 给的是 24/48px 的小头像，行内 22pt 方块在 3× 屏上要 ~66px 才不糊。
-    /// V2EX 自托管头像换 `_large` 变体（73px），gravatar 直接调 `s=` 尺寸参数。
+    /// 列表 HTML 给的是 24px（移动版）或 48px（桌面版）的小头像，行内 22pt 方块在
+    /// 3× 屏上要 ~66px 才不糊。V2EX 自托管头像换 `_large` 变体（73px），gravatar
+    /// 直接改写 `s=` 尺寸参数——两套模板给的尺寸不同，按模式替换而不是写死数值。
     private static func upscaledAvatar(_ url: String?) -> String? {
-        url?
-            .replacingOccurrences(of: "_normal.", with: "_large.")
-            .replacingOccurrences(of: "?s=24", with: "?s=73")
+        guard let url else { return nil }
+        let large = url.replacingOccurrences(of: "_normal.", with: "_large.")
+        return large.replacingOccurrences(
+            of: #"([?&]s=)\d+"#,
+            with: "$1" + "73",
+            options: .regularExpression
+        )
     }
 
-    /// 网页列表只有相对时间文案，而行上的时间和排序要的是时间戳。未登录取到的
-    /// 是英文（"Just Now" / "2 mins ago" / "8h 56m ago" / "3 days ago"），登录态
-    /// 是中文，两套都认；认不出就返回 nil，行上不显示时间而不是显示一个错的。
+    /// 桌面版列表每行的 `title="2026-08-31 11:30:18 +08:00"`。这是服务端直接给的
+    /// 绝对时间，不用像相对文案那样反推。格式固定，用一个 static formatter 就够
+    /// ——DateFormatter 构造很贵，逐行新建会拖慢整页解析。
+    private static let webRowTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss XXXXX"
+        return formatter
+    }()
+
+    private static func timestamp(fromAbsolute label: String) -> Int? {
+        let text = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let date = webRowTimeFormatter.date(from: text) else { return nil }
+        return Int(date.timeIntervalSince1970)
+    }
+
+    /// 相对时间兜底：移动版模板没有 title 属性，只能从「2 mins ago」这类文案反推。
+    /// 未登录取到的是英文（"Just Now" / "2 mins ago" / "8h 56m ago" / "3 days ago"），
+    /// 登录态是中文，两套都认；认不出就返回 nil，行上不显示时间而不是显示一个错的。
     private static func timestamp(fromRelative label: String) -> Int? {
         let text = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let now = Int(Date().timeIntervalSince1970)
@@ -1142,12 +1175,18 @@ extension V2EXClient {
         return cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
     }
 
-    private func webHTML(path: String, cookie: String? = nil) async throws -> String {
+    /// V2EX 按 UA 分发两套完全不同的模板，见 [Self.desktopUserAgent]。除列表抓取外
+    /// 所有网页流程（登录 / 回复 / 收藏）都沿用移动版，不要随手改这个默认值。
+    private static let mobileUserAgent =
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1"
+
+    private func webHTML(
+        path: String,
+        cookie: String? = nil,
+        userAgent: String = V2EXClient.mobileUserAgent
+    ) async throws -> String {
         var request = URLRequest(url: URL(string: "https://www.v2ex.com" + path)!)
-        request.setValue(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
-            forHTTPHeaderField: "User-Agent"
-        )
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         if let cookie { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
         let (data, response) = try await webSession.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200,
