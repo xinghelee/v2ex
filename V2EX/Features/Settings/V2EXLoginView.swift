@@ -418,6 +418,8 @@ private struct WebLoginSheet: View {
 
     /// 网页端登录表单已消失、正在验证会话（可能一两秒），期间显示浮层提示。
     @State private var isVerifying = false
+    /// 「粘贴」按钮 → WKWebView 的注入通道（长按菜单在部分真机上弹不出来）。
+    @StateObject private var webProxy = WebLoginProxy()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -433,6 +435,22 @@ private struct WebLoginSheet: View {
                 }
 
                 Spacer()
+
+                // 剪贴板有内容才出现：给「长按菜单弹不出来」的设备一条
+                // 不依赖系统编辑菜单的粘贴通道。
+                if UIPasteboard.general.hasStrings {
+                    Button {
+                        webProxy.pasteClipboard()
+                    } label: {
+                        Label("粘贴", systemImage: "doc.on.clipboard")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
 
                 Button {
                     dismiss()
@@ -451,11 +469,11 @@ private struct WebLoginSheet: View {
 
             Divider().opacity(0.3)
 
-            WebLoginView { cookie, username in
+            WebLoginView(onLoggedIn: { cookie, username in
                 session.save(cookie: cookie, username: username)
-            } onVerifyingChanged: { verifying in
+            }, onVerifyingChanged: { verifying in
                 isVerifying = verifying
-            }
+            }, proxy: webProxy)
             .overlay(alignment: .bottom) {
                 if isVerifying {
                     HStack(spacing: 10) {

@@ -1,6 +1,47 @@
 import SwiftUI
 import WebKit
 
+/// SwiftUI 层操控内嵌 WKWebView 的把手。长按编辑菜单在部分系统版本的内嵌
+/// WebView 里弹不出来（真机反馈：iOS 18 无法长按粘贴账号密码），所以粘贴
+/// 不走系统菜单——外层按钮经由这里把剪贴板文本直接注入网页的输入框。
+@MainActor
+final class WebLoginProxy: ObservableObject {
+    fileprivate weak var webView: WKWebView?
+
+    /// 把剪贴板文本插到当前聚焦输入框的光标处。没有聚焦的输入框时落到
+    /// 第一个空着的可见文本框——点「粘贴」的意图很明确，不该因为没先点
+    /// 输入框而毫无反应。
+    func pasteClipboard() {
+        guard let webView,
+              let text = UIPasteboard.general.string, !text.isEmpty,
+              let encoded = try? String(data: JSONEncoder().encode([text]), encoding: .utf8) else { return }
+        webView.evaluateJavaScript("""
+            (function(t) {
+                var el = document.activeElement;
+                var ok = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+                if (!ok) {
+                    el = Array.from(document.querySelectorAll('input, textarea')).find(function(f) {
+                        var type = (f.getAttribute('type') || 'text').toLowerCase();
+                        var fits = f.tagName === 'TEXTAREA' ||
+                            ['text', 'password', 'email', 'tel', 'number', 'search', 'url'].indexOf(type) >= 0;
+                        return fits && !f.value && !f.disabled && f.offsetParent !== null;
+                    });
+                    if (el) el.focus();
+                }
+                if (!el) { return false; }
+                var start = el.selectionStart == null ? el.value.length : el.selectionStart;
+                var end = el.selectionEnd == null ? el.value.length : el.selectionEnd;
+                el.value = el.value.slice(0, start) + t + el.value.slice(end);
+                var caret = start + t.length;
+                if (el.setSelectionRange) { el.setSelectionRange(caret, caret); }
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            })(\(encoded)[0])
+        """)
+    }
+}
+
 /// 网页登录容器：内嵌 WKWebView 加载 v2ex.com/signin，用户像用浏览器一样
 /// 登录（验证码、两步验证都正常）。判定成功的唯一标准是拿 WebView 的 cookie
 /// 请求 `/settings` 能停在 `/settings`——页面长得像已登录不算数，两步验证没走完
@@ -11,6 +52,8 @@ struct WebLoginView: UIViewRepresentable {
     /// 登录表单已消失、正在验证会话时为 true。验证含重试与一次网络请求，
     /// 可能持续一两秒，外层用它显示 loading，避免看起来像卡住。
     var onVerifyingChanged: (Bool) -> Void = { _ in }
+    /// 外层「粘贴」按钮的通道；见 [WebLoginProxy]。
+    var proxy: WebLoginProxy?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -19,11 +62,15 @@ struct WebLoginView: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1"
         context.coordinator.attach(to: webView)
+        proxy?.webView = webView
         webView.load(URLRequest(url: URL(string: "https://www.v2ex.com/signin")!))
         return webView
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {}
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        // 外层视图重建时会带来新的 proxy 实例，这里重新接上。
+        proxy?.webView = webView
+    }
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         uiView.configuration.websiteDataStore.httpCookieStore.remove(coordinator)
