@@ -129,89 +129,180 @@ struct NodesView: View {
 
     private var followedSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            GroupHeader(title: "我关注的")
-            CardSection(padding: 14) {
-                FlowLayout(spacing: 8) {
-                    ForEach(followed.names, id: \.self) { name in
-                        followedChip(name)
-                    }
-                    if !isEditingFollowed {
-                        Button {
-                            model.query = ""
-                            isSearchFocused = true
-                        } label: {
-                            Text("+ 添加")
-                                .font(.system(size: 14))
-                                .foregroundStyle(Theme.muted)
-                                .padding(.horizontal, 11)
-                                .padding(.vertical, 6)
-                                .overlay {
-                                    Capsule().strokeBorder(
-                                        Theme.faint,
-                                        style: StrokeStyle(lineWidth: 1, dash: [3, 3])
-                                    )
-                                }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("添加关注节点")
-                    }
+            GroupHeader(
+                title: "我关注的",
+                trailing: followed.names.isEmpty ? nil : "\(followed.names.count) 个"
+            )
+            LazyVGrid(columns: followedColumns, alignment: .leading, spacing: 10) {
+                ForEach(followed.names, id: \.self) { name in
+                    followedNodeCell(name)
+                }
+                if !isEditingFollowed {
+                    addFollowedNodeCell
                 }
             }
+            .padding(.horizontal, Theme.Metric.screenPadding)
         }
     }
 
+    private var followedColumns: [GridItem] {
+        let count = horizontalSizeClass == .regular ? 4 : 2
+        return Array(
+            repeating: GridItem(.flexible(), spacing: 10, alignment: .top),
+            count: count
+        )
+    }
+
     @ViewBuilder
-    private func followedChip(_ name: String) -> some View {
-        let title = NodeCatalog.displayName(for: name)
+    private func followedNodeCell(_ name: String) -> some View {
+        let node = model.node(named: name)
+        let title = node?.title ?? NodeCatalog.displayName(for: name)
 
         if isEditingFollowed {
-            HStack(spacing: 7) {
-                IdentitySquare(text: title, size: 20, imageURL: model.node(named: name)?.avatarURL)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Theme.ink)
-                    .accessibilityHidden(true)
-                Button {
-                    if reduceMotion {
-                        followed.remove(name)
-                    } else {
-                        withAnimation(.snappy(duration: 0.2)) { followed.remove(name) }
-                    }
-                } label: {
-                    Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Theme.unreadDot)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("取消关注 \(title)")
-            }
-            .padding(.leading, 7)
-            .padding(.trailing, 5)
-            .padding(.vertical, 3)
-            .background(Theme.inset, in: Capsule())
-            .frame(minHeight: 44)
-            .transition(.scale(scale: 0.92).combined(with: .opacity))
+            followedNodeCard(name: name, title: title, node: node, isEditing: true)
+                .transition(.scale(scale: 0.92).combined(with: .opacity))
         } else {
             NavigationLink(value: Route.node(name)) {
-                HStack(spacing: 7) {
-                    IdentitySquare(text: title, size: 20, imageURL: model.node(named: name)?.avatarURL)
-                    Text(title)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Theme.ink)
-                }
-                .padding(.leading, 7)
-                .padding(.trailing, 11)
-                .padding(.vertical, 6)
-                .background(Theme.inset, in: Capsule())
-                .frame(minHeight: 44)
+                followedNodeCard(name: name, title: title, node: node, isEditing: false)
             }
             .buttonStyle(.row)
             .accessibilityLabel("打开 \(title) 节点")
+            .accessibilityHint(followedNodeAccessibilitySummary(name: name, node: node))
             .transition(.scale(scale: 0.92).combined(with: .opacity))
         }
+    }
+
+    private func followedNodeCard(
+        name: String,
+        title: String,
+        node: V2Node?,
+        isEditing: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                IdentitySquare(
+                    text: title,
+                    size: 34,
+                    imageURL: node?.avatarURL,
+                    color: .clear
+                )
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isEditing {
+                    Button {
+                        removeFollowedNode(name)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(Theme.unreadDot)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("取消关注 \(title)")
+                    .accessibilityHint("从我关注的节点中移除")
+                    .offset(x: 8, y: -8)
+                }
+            }
+
+            Text(followedNodeSummary(name: name, node: node))
+                .font(.subheadline)
+                .lineSpacing(2)
+                .foregroundStyle(Theme.muted)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 36, alignment: .topLeading)
+
+            HStack(spacing: 6) {
+                if let topics = node?.topics {
+                    Label("\(topics.formatted()) 个话题", systemImage: "text.bubble")
+                        .lineLimit(1)
+                } else {
+                    Label("正在同步资料", systemImage: "arrow.triangle.2.circlepath")
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if !isEditing {
+                    Chevron()
+                        .accessibilityHidden(true)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(Theme.faint)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 142, alignment: .topLeading)
+        .background(Theme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Theme.separator, lineWidth: Theme.Metric.hairline)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func removeFollowedNode(_ name: String) {
+        if reduceMotion {
+            followed.remove(name)
+        } else {
+            withAnimation(.snappy(duration: 0.2)) { followed.remove(name) }
+        }
+    }
+
+    private var addFollowedNodeCell: some View {
+        Button {
+            model.query = ""
+            isSearchFocused = true
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 34, height: 34)
+
+                Text("添加关注")
+                    .font(.headline)
+                    .foregroundStyle(Theme.ink)
+                Text("搜索全部节点")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.muted)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 142, alignment: .topLeading)
+            .background(Theme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(
+                        Theme.faint,
+                        style: StrokeStyle(lineWidth: 1, dash: [4, 4])
+                    )
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.row)
+        .accessibilityLabel("添加关注节点")
+        .accessibilityHint("聚焦节点搜索")
+    }
+
+    private func followedNodeSummary(name: String, node: V2Node?) -> String {
+        if let header = node?.header {
+            let summary = HTMLText.plain(header)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !summary.isEmpty { return summary }
+        }
+        return "/go/\(name)"
+    }
+
+    private func followedNodeAccessibilitySummary(name: String, node: V2Node?) -> String {
+        var parts = [followedNodeSummary(name: name, node: node)]
+        if let topics = node?.topics {
+            parts.append("累计 \(topics.formatted()) 个话题")
+        }
+        return parts.joined(separator: "，")
     }
 
     /// iPad 上分类目录排成两列，iPhone 保持单列；行末与列尾的单元格

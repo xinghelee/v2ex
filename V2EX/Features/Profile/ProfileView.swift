@@ -46,24 +46,58 @@ struct ProfileView: View {
     @EnvironmentObject private var radar: RadarStore
     @EnvironmentObject private var moderation: ModerationStore
     @EnvironmentObject private var history: HistoryStore
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private struct HistoryDay: Identifiable {
+        let date: Date
+        let count: Int
+        var id: Date { date }
+    }
 
     /// 已连接 = 任一凭证在手：Access Token（只读 API）或网页会话（回复）。
     private var isConnected: Bool { token.hasToken || session.isLoggedIn }
 
-    private var metricColumns: [GridItem] {
-        let count = horizontalSizeClass == .regular ? 4 : 2
-        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
-    }
-
     private var libraryCount: Int {
         favorites.topics.count + history.entries.count + offline.bundles.count + model.recentTopics.count
+    }
+
+    /// `HistoryStore` keeps one entry per topic and updates its `viewedAt` when
+    /// the topic is opened again. The chart therefore reports real, unique
+    /// topics by their most recent reading day rather than inventing view counts.
+    private var weeklyHistory: [HistoryDay] {
+        let calendar = Calendar.autoupdatingCurrent
+        let today = calendar.startOfDay(for: Date())
+        return (0..<7).reversed().compactMap { distance in
+            guard let date = calendar.date(byAdding: .day, value: -distance, to: today) else {
+                return nil
+            }
+            let count = history.entries.lazy.filter {
+                calendar.isDate($0.viewedAt, inSameDayAs: date)
+            }.count
+            return HistoryDay(date: date, count: count)
+        }
+    }
+
+    private var weeklyHistoryCount: Int {
+        weeklyHistory.reduce(0) { $0 + $1.count }
+    }
+
+    private var weeklyHistoryMaximum: Int {
+        max(weeklyHistory.map(\.count).max() ?? 0, 1)
+    }
+
+    private var weeklyHistoryAccessibilityValue: String {
+        weeklyHistory.map { day in
+            "\(day.date.formatted(date: .abbreviated, time: .omitted)) \(day.count) 个话题"
+        }
+        .joined(separator: "，")
     }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 accountSection
+                weeklyFootprintSection
                 librarySection
                 utilitySection
 
@@ -218,32 +252,153 @@ struct ProfileView: View {
 
     // MARK: - Library
 
+    private var weeklyFootprintSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            GroupHeader(
+                title: "本周社区足迹",
+                trailing: weeklyHistoryCount == 0 ? nil : "\(weeklyHistoryCount) 个话题"
+            )
+            CardSection(padding: 18) {
+                VStack(alignment: .leading, spacing: 16) {
+                    weeklyHistorySummary
+
+                    weeklyHistoryChart
+
+                    Text("同一话题按最近一次阅读日期计入，仅使用保存在本机的浏览历史。")
+                        .font(.caption)
+                        .lineSpacing(2)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var weeklyHistorySummary: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(weeklyHistoryCount.formatted()) 个话题")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(weeklyHistoryCount == 0 ? Theme.faint : Theme.ink)
+                    .contentTransition(.numericText(value: Double(weeklyHistoryCount)))
+                Label("过去 7 天", systemImage: "calendar")
+                    .font(.body)
+                    .foregroundStyle(Theme.muted)
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(weeklyHistoryCount.formatted())
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(weeklyHistoryCount == 0 ? Theme.faint : Theme.ink)
+                    .contentTransition(.numericText(value: Double(weeklyHistoryCount)))
+                Text("个话题")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.muted)
+                Spacer(minLength: 8)
+                Label("过去 7 天", systemImage: "calendar")
+                    .font(.caption)
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+    }
+
+    private var weeklyHistoryChart: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 8) {
+                    ForEach(weeklyHistory) { day in
+                        let isToday = Calendar.autoupdatingCurrent.isDateInToday(day.date)
+                        HStack(spacing: 12) {
+                            Text(
+                                isToday
+                                    ? "今天"
+                                    : day.date.formatted(.dateTime.weekday(.wide))
+                            )
+                            .foregroundStyle(isToday ? Theme.accent : Theme.body)
+                            Spacer(minLength: 8)
+                            Text("\(day.count.formatted()) 个话题")
+                                .monospacedDigit()
+                                .foregroundStyle(day.count == 0 ? Theme.faint : Theme.ink)
+                        }
+                        .font(.body)
+                        .frame(minHeight: 44)
+                    }
+                }
+            } else {
+                weeklyHistoryBarChart
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("过去七天阅读足迹")
+        .accessibilityValue(weeklyHistoryAccessibilityValue)
+    }
+
+    private var weeklyHistoryBarChart: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            ForEach(weeklyHistory) { day in
+                let isToday = Calendar.autoupdatingCurrent.isDateInToday(day.date)
+                VStack(spacing: 6) {
+                    Text(day.count.formatted())
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(day.count == 0 ? Theme.faint : Theme.body)
+
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(
+                            day.count == 0
+                                ? Theme.separator
+                                : isToday ? Theme.accent : Theme.accent.opacity(0.48)
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: weeklyBarHeight(for: day.count))
+
+                    Text(day.date, format: .dateTime.weekday(.narrow))
+                        .font(.caption2)
+                        .foregroundStyle(isToday ? Theme.accent : Theme.muted)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(minHeight: 86, alignment: .bottom)
+    }
+
+    private func weeklyBarHeight(for count: Int) -> CGFloat {
+        guard count > 0 else { return 4 }
+        return max(8, 48 * CGFloat(count) / CGFloat(weeklyHistoryMaximum))
+    }
+
     private var librarySection: some View {
         VStack(alignment: .leading, spacing: 0) {
             GroupHeader(title: "我的空间", trailing: libraryCount > 0 ? "\(libraryCount) 项" : nil)
-            LazyVGrid(columns: metricColumns, spacing: 10) {
-                metricCard(
+            CardSection {
+                libraryRow(
                     icon: "star.fill",
                     count: favorites.topics.count,
                     title: "收藏",
                     caption: "喜欢的话题",
                     route: .favorites
                 )
-                metricCard(
+                RowSeparator(leadingInset: 68)
+
+                libraryRow(
                     icon: "clock.arrow.circlepath",
                     count: history.entries.count,
                     title: "浏览历史",
                     caption: "最近 \(HistoryStore.retentionDays) 天",
                     route: .history
                 )
-                metricCard(
+                RowSeparator(leadingInset: 68)
+
+                libraryRow(
                     icon: "arrow.down.circle.fill",
                     count: offline.bundles.count,
                     title: "稍后读",
                     caption: offline.bundles.isEmpty ? "离线资料库" : offline.formattedSize,
                     route: .offline
                 )
-                metricCard(
+                RowSeparator(leadingInset: 68)
+
+                libraryRow(
                     icon: "square.text.square.fill",
                     count: model.recentTopics.count,
                     title: "我的话题",
@@ -251,11 +406,10 @@ struct ProfileView: View {
                     route: .myPosts
                 )
             }
-            .padding(.horizontal, Theme.Metric.screenPadding)
         }
     }
 
-    private func metricCard(
+    private func libraryRow(
         icon: String,
         count: Int,
         title: String,
@@ -263,37 +417,36 @@ struct ProfileView: View {
         route: Route
     ) -> some View {
         NavigationLink(value: route) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top) {
-                    Image(systemName: icon)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 34, height: 34)
-                        .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    Spacer(minLength: 8)
-                    Text(count.formatted())
-                        .font(Type.number(24, weight: .bold))
-                        .foregroundStyle(count == 0 ? Theme.faint : Theme.ink)
-                        .contentTransition(.numericText(value: Double(count)))
-                }
-
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 36, height: 36)
+                    .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(Theme.ink)
                     Text(caption)
-                        .font(Type.meta(11))
+                        .font(.caption)
                         .foregroundStyle(Theme.muted)
                         .lineLimit(1)
                 }
+                Spacer(minLength: 8)
+                Text(count.formatted())
+                    .font(.body.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(count == 0 ? Theme.faint : Theme.ink)
+                    .contentTransition(.numericText(value: Double(count)))
+                Chevron()
+                    .accessibilityHidden(true)
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-            .background(Theme.card)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .padding(.horizontal, Theme.Metric.cardPadding)
+            .frame(minHeight: 68)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.row)
+        .accessibilityLabel("\(title)，\(count.formatted()) 项，\(caption)")
     }
 
     // MARK: - Utilities

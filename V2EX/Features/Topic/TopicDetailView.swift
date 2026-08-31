@@ -316,8 +316,9 @@ struct TopicDetailView: View {
     private var mentionSuggestions: some View {
         let candidates = mentionCandidates
         if composerFocused, !candidates.isEmpty {
+            let trayShape = RoundedRectangle(cornerRadius: 14, style: .continuous)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: 4) {
                     ForEach(candidates, id: \.self) { name in
                         Button {
                             insertMention(name)
@@ -329,17 +330,20 @@ struct TopicDetailView: View {
                                     .foregroundStyle(Theme.ink)
                                     .lineLimit(1)
                             }
-                            .padding(.leading, 6)
-                            .padding(.trailing, 11)
-                            .padding(.vertical, 6)
-                            .glassPill()
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 36)
+                            .contentShape(Capsule())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(DetailMentionButtonStyle())
                     }
                 }
-                .padding(.horizontal, 18)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 3)
             }
+            .frame(maxWidth: .infinity)
             .frame(height: 42)
+            .background(Theme.inset, in: trayShape)
+            .detailHairline(in: trayShape)
             .transition(.opacity)
         }
     }
@@ -452,7 +456,7 @@ struct TopicDetailView: View {
     // MARK: Topic card
 
     private func topicCard(_ topic: V2Topic) -> some View {
-        CardSection(padding: 18) {
+        DetailSolidCard(padding: 18) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(topic.title)
                     .font(.system(size: 20, weight: .bold))
@@ -543,29 +547,45 @@ struct TopicDetailView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.ink)
             Spacer()
-            HStack(spacing: 6) {
-                ForEach(TopicDetailViewModel.ReplyFilter.allCases) { filter in
-                    Button {
-                        withAnimation(.snappy) { model.filter = filter }
-                    } label: {
-                        Text(filter.title)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(model.filter == filter ? Theme.accent : Theme.muted)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 5)
-                            .background(
-                                model.filter == filter
-                                    ? AnyShapeStyle(Theme.accentSoft)
-                                    : AnyShapeStyle(Theme.inset)
-                            )
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            replyFilterControl
         }
         .padding(.horizontal, Theme.Metric.screenPadding + 6)
         .padding(.top, 2)
+    }
+
+    /// One material surface with a solid, high-contrast selection indicator.
+    /// Keeping the two buttons inside one capsule avoids the noisy stack of
+    /// separate translucent chips while preserving the existing filter state.
+    private var replyFilterControl: some View {
+        let shape = Capsule()
+        let selectedLabel = Theme.dynamic(light: 0xFFFFFF, dark: 0x000000)
+        return HStack(spacing: 0) {
+            ForEach(TopicDetailViewModel.ReplyFilter.allCases) { filter in
+                let isSelected = model.filter == filter
+                Button {
+                    withAnimation(.snappy) { model.filter = filter }
+                } label: {
+                    Text(filter.title)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                        // Adaptive pure ink keeps every selectable accent
+                        // palette above small-text contrast targets.
+                        .foregroundStyle(isSelected ? selectedLabel : Theme.body)
+                        .padding(.horizontal, 11)
+                        .frame(minHeight: 38)
+                        .background {
+                            if isSelected {
+                                Capsule().fill(Theme.accent)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(isSelected ? "已选择" : "未选择")
+            }
+        }
+        .padding(3)
+        .glassPill(in: shape)
+        .detailHairline(in: shape)
     }
 
     // MARK: Discussion track
@@ -702,6 +722,11 @@ struct TopicDetailView: View {
                         style: .continuous
                     )
                 )
+                .overlay {
+                    DetailReplyGroupBorder(isFirst: index == 0, isLast: index == items.count - 1)
+                        .stroke(Theme.separator, lineWidth: Theme.Metric.hairline)
+                        .allowsHitTesting(false)
+                }
                 .padding(.horizontal, Theme.Metric.screenPadding)
                 .padding(.top, index == 0 ? 0 : -10)
             }
@@ -892,6 +917,7 @@ private struct DiscussionTrack: View {
     let onSelect: (ThreadedReply) -> Void
 
     var body: some View {
+        let trackShape = RoundedRectangle(cornerRadius: 18, style: .continuous)
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Label("讨论轨道", systemImage: "point.3.connected.trianglepath.dotted")
@@ -946,17 +972,121 @@ private struct DiscussionTrack: View {
             }
             .padding(.horizontal, 5)
             .padding(.vertical, 4)
-            .glassPill(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .padding(13)
-        .background(Theme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Theme.separator, lineWidth: Theme.Metric.hairline)
-        }
+        .glassPill(in: trackShape)
+        .detailHairline(in: trackShape)
         .padding(.horizontal, Theme.Metric.screenPadding)
         .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+}
+
+// MARK: - Detail-only surfaces
+
+/// An opaque reading surface scoped to topic detail. The local border keeps
+/// text crisp against the canvas without changing the shared CardSection used
+/// by the rest of the app.
+private struct DetailSolidCard<Content: View>: View {
+    let padding: CGFloat
+    private let content: Content
+
+    init(padding: CGFloat = 0, @ViewBuilder content: () -> Content) {
+        self.padding = padding
+        self.content = content()
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) { content }
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.card)
+            .clipShape(shape)
+            .detailHairline(in: shape)
+            .padding(.horizontal, Theme.Metric.screenPadding)
+    }
+}
+
+/// Draws one continuous outline around lazily-created reply rows. Each row
+/// contributes only its two vertical edges; the first and last also contribute
+/// the rounded top or bottom, avoiding doubled separators between floors.
+private struct DetailReplyGroupBorder: Shape {
+    let isFirst: Bool
+    let isLast: Bool
+
+    func path(in rect: CGRect) -> Path {
+        let lineWidth = Theme.Metric.hairline
+        let frame = rect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
+        let radius = min(
+            Theme.Metric.cardRadius,
+            min(frame.width / 2, frame.height / 2)
+        )
+        var path = Path()
+
+        if isFirst && isLast {
+            path.addRoundedRect(
+                in: frame,
+                cornerSize: CGSize(width: radius, height: radius),
+                style: .continuous
+            )
+            return path
+        }
+
+        if isFirst {
+            path.move(to: CGPoint(x: frame.minX, y: frame.maxY))
+            path.addLine(to: CGPoint(x: frame.minX, y: frame.minY + radius))
+            path.addQuadCurve(
+                to: CGPoint(x: frame.minX + radius, y: frame.minY),
+                control: CGPoint(x: frame.minX, y: frame.minY)
+            )
+            path.addLine(to: CGPoint(x: frame.maxX - radius, y: frame.minY))
+            path.addQuadCurve(
+                to: CGPoint(x: frame.maxX, y: frame.minY + radius),
+                control: CGPoint(x: frame.maxX, y: frame.minY)
+            )
+            path.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY))
+        } else if isLast {
+            path.move(to: CGPoint(x: frame.minX, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.minX, y: frame.maxY - radius))
+            path.addQuadCurve(
+                to: CGPoint(x: frame.minX + radius, y: frame.maxY),
+                control: CGPoint(x: frame.minX, y: frame.maxY)
+            )
+            path.addLine(to: CGPoint(x: frame.maxX - radius, y: frame.maxY))
+            path.addQuadCurve(
+                to: CGPoint(x: frame.maxX, y: frame.maxY - radius),
+                control: CGPoint(x: frame.maxX, y: frame.maxY)
+            )
+            path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY))
+        } else {
+            path.move(to: CGPoint(x: frame.minX, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.minX, y: frame.maxY))
+            path.move(to: CGPoint(x: frame.maxX, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY))
+        }
+
+        return path
+    }
+}
+
+private struct DetailMentionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                configuration.isPressed ? Theme.card : Color.clear,
+                in: Capsule()
+            )
+            .opacity(configuration.isPressed ? 0.82 : 1)
+    }
+}
+
+private extension View {
+    func detailHairline<S: InsettableShape>(in shape: S) -> some View {
+        overlay {
+            shape
+                .strokeBorder(Theme.separator, lineWidth: Theme.Metric.hairline)
+                .allowsHitTesting(false)
+        }
     }
 }
 
