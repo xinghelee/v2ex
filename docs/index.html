@@ -7,7 +7,12 @@
   <meta name="description" content="v2Explore，一款为 iPhone 与 iPad 打造的 V2EX 原生客户端。">
   <meta property="og:title" content="v2Explore · Way to Explore">
   <meta property="og:description" content="更舒服地逛 V2EX。为 iPhone 与 iPad 打造的原生客户端。">
-  <meta property="og:image" content="ios-native-prototype.png">
+  <meta property="og:image" content="https://xinghelee.github.io/v2ex/screenshots/store/og-cover.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="v2Explore 在 iPad 上的阅读界面">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://xinghelee.github.io/v2ex/screenshots/store/og-cover.jpg">
   <title>v2Explore · Way to Explore</title>
   <link rel="icon" type="image/png" href="app-icon.png?v=20260805">
   <style>
@@ -209,16 +214,16 @@
     .phone {
       position: absolute;
       overflow: hidden;
-      border: 6px solid #181b19;
-      border-radius: 39px;
-      background: #181b19;
+      border: 1px solid rgba(23, 26, 24, 0.08);
+      border-radius: 40px;
+      background: #f2f2f7;
       box-shadow: var(--shadow);
     }
 
     .phone img {
       width: 100%;
       height: 100%;
-      border-radius: 32px;
+      border-radius: inherit;
       object-fit: cover;
     }
 
@@ -296,20 +301,21 @@
 
     .screens {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
     }
 
     .screen {
       overflow: hidden;
       border: 1px solid var(--border);
-      border-radius: 18px;
+      border-radius: 24px;
       background: var(--surface);
+      box-shadow: 0 14px 34px rgba(29, 40, 34, 0.06);
     }
 
     .screen-image {
       overflow: hidden;
-      aspect-ratio: 0.59;
+      aspect-ratio: 720 / 1565;
       background: var(--surface-muted);
     }
 
@@ -381,33 +387,36 @@
 
     .ipad-panel {
       display: grid;
-      grid-template-columns: 0.68fr 1.32fr;
+      grid-template-columns: 280px 1fr;
       align-items: center;
-      gap: 64px;
+      gap: 50px;
       overflow: hidden;
       padding: 64px 0 64px 64px;
+      border: 1px solid rgba(23, 26, 24, 0.07);
       border-radius: 28px;
-      background: #1d2924;
-      color: #fff;
+      background: linear-gradient(135deg, #eeece5 0%, #e1eee7 100%);
+      color: var(--text);
     }
 
-    .ipad-panel .eyebrow { color: #8acdb4; }
+    .ipad-panel .eyebrow { color: var(--green); }
     .ipad-panel p {
       margin: 21px 0 0;
-      color: rgba(255, 255, 255, 0.62);
+      color: var(--secondary);
       font-size: 15px;
       line-height: 1.75;
     }
 
     .ipad-frame {
-      width: 890px;
-      padding: 8px;
-      border-radius: 23px;
-      background: #090b0a;
-      box-shadow: 0 26px 70px rgba(0, 0, 0, 0.3);
+      width: 760px;
+      border-radius: 30px;
+      background: transparent;
+      box-shadow: 0 26px 70px rgba(29, 40, 34, 0.18);
     }
 
-    .ipad-frame img { border-radius: 15px; }
+    .ipad-frame img {
+      border: 1px solid rgba(23, 26, 24, 0.08);
+      border-radius: 30px;
+    }
 
     .download-section {
       padding: 100px 0 56px;
@@ -453,8 +462,8 @@
       .phone.home { width: 250px; transform: translateX(-36%); }
       .phone.topic { left: 15px; width: 200px; }
       .section-head { gap: 40px; }
-      .screen-image { aspect-ratio: 0.55; }
-      .ipad-panel { grid-template-columns: 0.8fr 1.2fr; gap: 40px; padding-left: 48px; }
+      .ipad-panel { grid-template-columns: 240px 1fr; gap: 32px; padding-left: 40px; }
+      .ipad-frame { width: 720px; }
     }
 
     @media (max-width: 760px) {
@@ -472,12 +481,26 @@
       .fact + .fact { border-top: 1px solid var(--border); border-left: 0; }
       .section, .ipad-section { padding: 80px 0; }
       .section-head { grid-template-columns: 1fr; gap: 22px; margin-bottom: 38px; }
-      .screens { grid-template-columns: 1fr 1fr; }
+      .screens {
+        display: flex;
+        gap: 14px;
+        overflow-x: auto;
+        margin-right: -18px;
+        padding: 2px 18px 10px 0;
+        scroll-padding-inline: 0 18px;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+      }
+      .screens::-webkit-scrollbar { display: none; }
+      .screen {
+        flex: 0 0 min(74vw, 330px);
+        scroll-snap-align: start;
+      }
       .feature-list { grid-template-columns: 1fr; }
       .feature, .feature:nth-child(even) { padding: 27px 0; border-left: 0; }
       .ipad-panel { grid-template-columns: 1fr; gap: 38px; padding: 42px 0 42px 38px; }
       .ipad-copy { padding-right: 38px; }
-      .ipad-frame { width: 145%; }
+      .ipad-frame { width: calc(100% - 38px); }
       .download-section { padding-top: 80px; }
     }
 
@@ -488,8 +511,7 @@
       .actions { align-items: stretch; flex-direction: column; }
       .button { width: 100%; }
       .hero-visual { min-height: 480px; border-radius: 22px; }
-      .phone { border-width: 5px; border-radius: 31px; }
-      .phone img { border-radius: 25px; }
+      .phone { border-radius: 31px; }
       .phone.home { top: 36px; width: 220px; transform: translateX(-27%); }
       .phone.topic { top: 100px; left: -2%; width: 175px; }
       .hero-visual::after { right: 17px; bottom: 16px; }
@@ -500,7 +522,7 @@
       .screen figcaption span { display: block; margin-top: 3px; }
       h2 { font-size: 35px; }
       .ipad-panel { padding-top: 36px; border-radius: 22px; }
-      .ipad-frame { width: 175%; }
+      .ipad-frame { width: calc(100% - 38px); }
       footer { align-items: flex-start; flex-direction: column; margin-top: 75px; }
     }
 
@@ -532,7 +554,7 @@
         <div>
           <p class="overline">V2EX 的 iPhone 与 iPad 客户端</p>
           <h1 id="hero-title">更舒服地逛 V2EX。</h1>
-          <p class="hero-copy">v2Explore 使用 SwiftUI 原生构建。浏览话题、查看回复、关注节点、保存内容，常用的功能都在熟悉的位置。</p>
+          <p class="hero-copy">v2Explore 使用 SwiftUI 原生构建，让首页浏览、长帖阅读、节点关注、搜索与收藏保持同一套清晰节奏，内容始终在前。</p>
           <div class="actions">
             <a class="button primary" href="https://testflight.apple.com/join/jUBsFk9u">通过 TestFlight 安装 <span aria-hidden="true">→</span></a>
             <a class="button" href="https://github.com/xinghelee/v2ex-android/releases/latest">下载 Android 版</a>
@@ -541,8 +563,8 @@
         </div>
 
         <div class="hero-visual" aria-label="v2Explore 应用界面预览">
-          <div class="phone topic" aria-hidden="true"><img src="screenshots/topic-hd.png" width="1320" height="2868" alt=""></div>
-          <div class="phone home"><img src="screenshots/home-hd.png" width="1320" height="2868" alt="v2Explore 首页界面"></div>
+          <div class="phone topic" aria-hidden="true"><img src="screenshots/store/02-longform-reading.webp" width="720" height="1565" alt="" decoding="async"></div>
+          <div class="phone home"><img src="screenshots/store/01-community-now.webp" width="720" height="1565" alt="v2Explore 首页界面" fetchpriority="high"></div>
         </div>
       </div>
     </section>
@@ -558,15 +580,17 @@
     <section class="section" id="screens" aria-labelledby="screens-title">
       <div class="container">
         <div class="section-head">
-          <div><p class="eyebrow">应用界面</p><h2 id="screens-title">熟悉，但更适合在手机上使用。</h2></div>
-          <p class="section-intro">信息层级和 V2EX 保持一致，操作则按照移动端习惯重新安排。不需要花时间学习一套新的逻辑。</p>
+          <div><p class="eyebrow">新版界面</p><h2 id="screens-title">内容在前，界面退后一步。</h2></div>
+          <p class="section-intro">从社区动态到长帖、节点、搜索、收藏与发布，信息层级保持一致；操作则按照 iPhone 的使用习惯重新安排。</p>
         </div>
 
         <div class="screens">
-          <figure class="screen"><div class="screen-image"><img src="screenshots/home-hd.png" width="1320" height="2868" alt="首页话题流"></div><figcaption><strong>首页</strong><span>话题流</span></figcaption></figure>
-          <figure class="screen"><div class="screen-image"><img src="screenshots/topic-hd.png" width="1320" height="2868" alt="话题与楼层回复"></div><figcaption><strong>话题</strong><span>正文与回复</span></figcaption></figure>
-          <figure class="screen"><div class="screen-image"><img src="screenshots/nodes-hd.png" width="1320" height="2868" alt="节点目录"></div><figcaption><strong>节点</strong><span>查找与关注</span></figcaption></figure>
-          <figure class="screen"><div class="screen-image"><img src="screenshots/profile-hd.png" width="1320" height="2868" alt="个人页面"></div><figcaption><strong>我的</strong><span>收藏与设置</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/store/01-community-now.webp" width="720" height="1565" alt="首页社区动态"></div><figcaption><strong>首页</strong><span>社区动态</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/store/02-longform-reading.webp" width="720" height="1565" alt="话题正文与楼层回复"></div><figcaption><strong>话题</strong><span>长帖阅读</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/store/03-followed-nodes.webp" width="720" height="1565" alt="关注节点与完整节点目录"></div><figcaption><strong>节点</strong><span>关注与发现</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/store/04-community-search.webp" width="720" height="1565" alt="社区关键词搜索"></div><figcaption><strong>搜索</strong><span>关键词检索</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/store/05-organized-favorites.webp" width="720" height="1565" alt="收藏夹、标签与备注"></div><figcaption><strong>收藏</strong><span>标签与备注</span></figcaption></figure>
+          <figure class="screen"><div class="screen-image"><img src="screenshots/store/06-compose-drafts.webp" width="720" height="1565" alt="新话题编辑与草稿保存"></div><figcaption><strong>发布</strong><span>草稿自动保存</span></figcaption></figure>
         </div>
       </div>
     </section>
@@ -593,10 +617,10 @@
       <div class="ipad-panel container">
         <div class="ipad-copy">
           <p class="eyebrow">为 iPad 调整</p>
-          <h2 id="ipad-title">不只是把手机界面拉宽。</h2>
-          <p>宽屏下，话题正文与回复使用双栏布局，各自独立滚动。窗口变窄时再自然回到单栏。</p>
+          <h2 id="ipad-title">正文与讨论，并肩展开。</h2>
+          <p>宽屏下，话题正文与回复使用双栏布局，各自独立滚动；窗口变窄时再自然回到单栏。</p>
         </div>
-        <div class="ipad-frame"><img src="screenshots/ipad-dual-pane.png" alt="v2Explore iPad 双栏阅读界面"></div>
+        <div class="ipad-frame"><img src="screenshots/store/ipad-split-reading.webp" width="1600" height="1200" alt="v2Explore iPad 双栏阅读界面"></div>
       </div>
     </section>
 
