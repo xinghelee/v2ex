@@ -93,8 +93,123 @@ actor V2EXClient {
         try await getV1("/api/topics/latest.json")
     }
 
+    /// `/api/topics/hot.json` 的服务端返回上限。
+    private static let hotAPILimit = 10
+
+    /// 「最热」。官方 `/api/topics/hot.json` 服务端硬性只返回 10 条且没有分页
+    /// 参数，网页版 `?tab=hot` 同一时刻有 30+ 条——用户对着网页看会觉得 App
+    /// 少了一大截。所以优先抓网页（未登录也能拿全），解析结果确实比 API 上限
+    /// 多才采用；被改版打残时静默退回 API，最热永远不会空。
     func hotTopics() async throws -> [V2Topic] {
-        try await getV1("/api/topics/hot.json")
+        if let scraped = try? await hotTopicsFromWeb(), scraped.count > Self.hotAPILimit {
+            return scraped
+        }
+        return try await getV1("/api/topics/hot.json")
+    }
+
+    private func hotTopicsFromWeb() async throws -> [V2Topic] {
+        let html = try await webHTML(path: "/?tab=hot")
+        let rows = Self.topicRows(from: html)
+        Self.log("hotTopicsFromWeb: rows=\(rows.count) len=\(html.count)")
+        return rows
+    }
+
+    /// 解析网页首页/节点页的话题行。实测结构（未登录）：
+    /// ```
+    /// <div class="cell item"><table><tr>
+    ///   <td><a href="/member/foo"><img src="…_normal.png" class="avatar" …/></a></td>
+    ///   <td><span class="small fade"><a class="node" href="/go/career">职场话题</a>
+    ///       &nbsp;•&nbsp; <strong><a href="/member/foo">foo</a></strong></span>
+    ///     <span class="item_title"><a href="/t/123#reply22" class="topic-link">标题</a></span>
+    ///     <span class="small fade">2 mins ago &nbsp;•&nbsp; Lastly replied by …</span></td>
+    ///   <td><a href="/t/123#reply22" class="count_livid">22</a></td>
+    /// </tr></table></div>
+    /// ```
+    /// 逐 cell 切块再取字段：同一块里作者和「最后回复者」用的是同一种
+    /// `<strong><a href="/member/…">` 标记，只有按出现顺序取第一个才不会认错人。
+    /// 正文网页列表不提供，`content` 留空——只影响首条大卡片的摘要行。
+    private static func topicRows(from html: String) -> [V2Topic] {
+        var topics: [V2Topic] = []
+        var seen = Set<Int>()
+
+        for block in html.components(separatedBy: #"<div class="cell item">"#).dropFirst() {
+            guard let title = matches(
+                in: block,
+                pattern: #"<a href="/t/(\d+)(?:#[^"]*)?"[^>]*class="[^"]*topic-link[^"]*"[^>]*>([\s\S]*?)</a>"#,
+                groupCount: 2
+            ).first, let id = Int(title[1]), seen.insert(id).inserted else { continue }
+
+            let node = matches(
+                in: block,
+                pattern: #"<a class="node" href="/go/([^"]+)">([^<]*)</a>"#,
+                groupCount: 2
+            ).first
+            let author = htmlField(block, pattern: #"<strong><a href="/member/([^"]+)">"#)
+            let avatar = htmlField(block, pattern: #"<img src="([^"]+)"[^>]*class="avatar""#)
+            let replies = htmlField(block, pattern: #"class="count_[a-z]+"[^>]*>(\d+)"#).flatMap(Int.init)
+            let touched = htmlField(block, pattern: #"<span class="small fade">([^<]+?)(?:&nbsp;|</span>)"#)
+                .flatMap(timestamp(fromRelative:))
+
+            topics.append(V2Topic(
+                id: id,
+                title: HTMLText.plain(title[2]),
+                content: nil,
+                contentRendered: nil,
+                url: "https://www.v2ex.com/t/\(id)",
+                replies: replies ?? 0,
+                created: nil,
+                lastTouched: touched,
+                lastReplyBy: nil,
+                node: node.map { V2Node.stub(name: $0[1], title: HTMLText.plain($0[2])) },
+                member: author.map {
+                    var member = V2Member(username: $0)
+                    member.avatarLarge = upscaledAvatar(avatar)
+                    member.avatarNormal = avatar
+                    return member
+                }
+            ))
+        }
+        return topics
+    }
+
+    /// 列表 HTML 给的是 24/48px 的小头像，行内 22pt 方块在 3× 屏上要 ~66px 才不糊。
+    /// V2EX 自托管头像换 `_large` 变体（73px），gravatar 直接调 `s=` 尺寸参数。
+    private static func upscaledAvatar(_ url: String?) -> String? {
+        url?
+            .replacingOccurrences(of: "_normal.", with: "_large.")
+            .replacingOccurrences(of: "?s=24", with: "?s=73")
+    }
+
+    /// 网页列表只有相对时间文案，而行上的时间和排序要的是时间戳。未登录取到的
+    /// 是英文（"Just Now" / "2 mins ago" / "8h 56m ago" / "3 days ago"），登录态
+    /// 是中文，两套都认；认不出就返回 nil，行上不显示时间而不是显示一个错的。
+    private static func timestamp(fromRelative label: String) -> Int? {
+        let text = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let now = Int(Date().timeIntervalSince1970)
+        if text.hasPrefix("just now") || text.hasPrefix("刚刚") { return now }
+
+        let units: [String: Int] = [
+            "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1, "秒": 1,
+            "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60, "分": 60, "分钟": 60,
+            "h": 3_600, "hour": 3_600, "hours": 3_600, "时": 3_600, "小时": 3_600,
+            "d": 86_400, "day": 86_400, "days": 86_400, "天": 86_400, "日": 86_400,
+            "week": 604_800, "weeks": 604_800, "周": 604_800,
+            "mo": 2_592_000, "month": 2_592_000, "months": 2_592_000, "月": 2_592_000, "个月": 2_592_000,
+            "year": 31_536_000, "years": 31_536_000, "年": 31_536_000,
+        ]
+        // "8h 56m ago" 是复合的，所有片段累加才是完整间隔。
+        let parts = matches(
+            in: text,
+            pattern: #"(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|days?|weeks?|months?|mo|years?|小时|分钟|个月|[smhd秒分时天日周月年])"#,
+            groupCount: 2
+        )
+        guard !parts.isEmpty else { return nil }
+
+        let elapsed = parts.reduce(0) { total, part in
+            total + (Int(part[1]) ?? 0) * (units[part[2]] ?? 0)
+        }
+        guard elapsed > 0 else { return nil }
+        return now - elapsed
     }
 
     func topics(inNode name: String) async throws -> [V2Topic] {
