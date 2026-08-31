@@ -41,6 +41,22 @@ private struct V2Envelope<Value: Decodable>: Decodable {
 /// * V2EX API 2.0 — needs a Personal Access Token; notifications, own profile,
 ///   paginated node topics.
 /// * sov2ex — the community full-text index, since V2EX exposes no search API.
+/// V2EX 主站端点。Issue #2 希望能自定义 API 域名（部分网络环境访问不了
+/// v2ex.com），设置 UI 排在当前版本过审之后；先把网络请求侧散落的硬编码
+/// 域名收敛到这里，届时把 `base` 换成可写配置即可。
+///
+/// 只收敛**请求**：话题的永久链接（分享、收藏落盘的 `V2Topic.url`）始终
+/// 用官方域名——镜像域名是用户的私事，不该被写进数据再扩散出去。
+enum V2EXEndpoint {
+    /// 主站（API 1.0/2.0、网页表单、登录）。
+    static let base = "https://www.v2ex.com"
+    /// 会话 cookie 的域匹配、WKWebView 登录页的域名白名单。
+    static let cookieDomain = "v2ex.com"
+    static let webHosts: Set<String> = ["v2ex.com", "www.v2ex.com"]
+
+    static func url(_ path: String) -> URL { URL(string: base + path)! }
+}
+
 actor V2EXClient {
     static let shared = V2EXClient()
 
@@ -421,7 +437,7 @@ actor V2EXClient {
     /// source. Parses `N views` (en) / `N 次点击` (zh) out of the HTML.
     /// Failure is silent: callers treat nil as "unknown".
     func topicViews(id: Int) async -> Int? {
-        guard let url = URL(string: "https://www.v2ex.com/t/\(id)") else { return nil }
+        guard let url = URL(string: V2EXEndpoint.base + "/t/\(id)") else { return nil }
         var request = URLRequest(url: url)
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
@@ -458,7 +474,7 @@ actor V2EXClient {
     }
 
     private func makeRequest(path: String, query: [String: String]) throws -> URLRequest {
-        var components = URLComponents(string: "https://www.v2ex.com" + path)!
+        var components = URLComponents(string: V2EXEndpoint.base + path)!
         if !query.isEmpty {
             components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
         }
@@ -595,7 +611,7 @@ extension V2EXClient {
     /// GET /_captcha —— 登录表单的验证码图片。验证码与 once 绑定，
     /// URL 必须带 `?once=`，否则服务器校验时对不上。
     func captchaImage(once: String) async throws -> Data {
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com/_captcha?once=\(once)")!)
+        var request = URLRequest(url: V2EXEndpoint.url("/_captcha?once=\(once)"))
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
             forHTTPHeaderField: "User-Agent"
@@ -622,12 +638,12 @@ extension V2EXClient {
             URLQueryItem(name: "once", value: challenge.once),
             URLQueryItem(name: "next", value: challenge.next),
         ]
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com/signin")!)
+        var request = URLRequest(url: V2EXEndpoint.url("/signin"))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         // 对齐真实浏览器（CDP 抓包）：Referer + Origin 必须匹配。
-        request.setValue("https://www.v2ex.com/signin", forHTTPHeaderField: "Referer")
-        request.setValue("https://www.v2ex.com", forHTTPHeaderField: "Origin")
+        request.setValue(V2EXEndpoint.base + "/signin", forHTTPHeaderField: "Referer")
+        request.setValue(V2EXEndpoint.base, forHTTPHeaderField: "Origin")
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
 
         let (data, response) = try await webSession.data(for: request)
@@ -671,13 +687,13 @@ extension V2EXClient {
             URLQueryItem(name: "code", value: code),
             URLQueryItem(name: "once", value: once),
         ]
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com/2fa")!)
+        var request = URLRequest(url: V2EXEndpoint.url("/2fa"))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
         // 对齐真实浏览器（CDP 抓包）：2FA 的 Referer 是 /2fa，且带 Origin。
-        request.setValue("https://www.v2ex.com/2fa", forHTTPHeaderField: "Referer")
-        request.setValue("https://www.v2ex.com", forHTTPHeaderField: "Origin")
+        request.setValue(V2EXEndpoint.base + "/2fa", forHTTPHeaderField: "Referer")
+        request.setValue(V2EXEndpoint.base, forHTTPHeaderField: "Origin")
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
 
         let (data, response) = try await webSession.data(for: request)
@@ -697,7 +713,7 @@ extension V2EXClient {
 
     /// 用 cookie GET /settings 验证会话是否仍有效（200 且停在 /settings = 已登录）。
     func verifySession(cookie: String) async -> Bool {
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com/settings")!)
+        var request = URLRequest(url: V2EXEndpoint.url("/settings"))
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
@@ -723,11 +739,11 @@ extension V2EXClient {
             URLQueryItem(name: "content", value: trimmed),
             URLQueryItem(name: "once", value: once),
         ]
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com/t/\(topicID)")!)
+        var request = URLRequest(url: V2EXEndpoint.url("/t/\(topicID)"))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        request.setValue("https://www.v2ex.com/t/\(topicID)", forHTTPHeaderField: "Referer")
+        request.setValue(V2EXEndpoint.base + "/t/\(topicID)", forHTTPHeaderField: "Referer")
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
 
         let (data, response) = try await webSession.data(for: request)
@@ -789,7 +805,7 @@ extension V2EXClient {
         id: Int,
         cookie: String
     ) async throws -> (views: Int?, appends: [TopicAppend], proMembers: Set<String>) {
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com/t/\(id)")!)
+        var request = URLRequest(url: V2EXEndpoint.url("/t/\(id)"))
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
             forHTTPHeaderField: "User-Agent"
@@ -844,7 +860,7 @@ extension V2EXClient {
     /// 只能从网页话题页解析 `<div class="topic_append">` 块。
     /// 注意：V2EX 对未登录访问隐藏 APPEND，需要登录 cookie 才能抓到。
     func topicAppends(id: Int, cookie: String) async throws -> [TopicAppend] {
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com/t/\(id)")!)
+        var request = URLRequest(url: V2EXEndpoint.url("/t/\(id)"))
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
             forHTTPHeaderField: "User-Agent"
@@ -899,7 +915,7 @@ extension V2EXClient {
     func toggleFavorite(topicID: Int, cookie: String) async throws -> Bool {
         let info = try await favoritePageInfo(topicID: topicID, cookie: cookie)
         let action = info.favorited ? "unfavorite" : "favorite"
-        guard let url = URL(string: "https://www.v2ex.com/\(action)/topic/\(topicID)?once=\(info.once)") else {
+        guard let url = URL(string: V2EXEndpoint.base + "/\(action)/topic/\(topicID)?once=\(info.once)") else {
             throw V2EXError.webLogin("收藏链接构造失败")
         }
         var request = URLRequest(url: url)
@@ -908,7 +924,7 @@ extension V2EXClient {
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        request.setValue("https://www.v2ex.com/t/\(topicID)", forHTTPHeaderField: "Referer")
+        request.setValue(V2EXEndpoint.base + "/t/\(topicID)", forHTTPHeaderField: "Referer")
         let (_, response) = try await webSession.data(for: request)
         let http = response as? HTTPURLResponse
         guard http?.statusCode == 200 else {
@@ -1093,11 +1109,11 @@ extension V2EXClient {
             URLQueryItem(name: "syntax", value: "markdown"),
             URLQueryItem(name: "once", value: once),
         ]
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com/write")!)
+        var request = URLRequest(url: V2EXEndpoint.url("/write"))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        request.setValue("https://www.v2ex.com" + formPath, forHTTPHeaderField: "Referer")
+        request.setValue(V2EXEndpoint.base + formPath, forHTTPHeaderField: "Referer")
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
             forHTTPHeaderField: "User-Agent"
@@ -1183,7 +1199,7 @@ extension V2EXClient {
     }
 
     private func extractCookies() throws -> String {
-        guard let url = URL(string: "https://www.v2ex.com/"),
+        guard let url = URL(string: V2EXEndpoint.base + "/"),
               let cookies = webSession.configuration.httpCookieStorage?.cookies(for: url),
               !cookies.isEmpty else {
             throw V2EXError.webLogin("未获得会话")
@@ -1201,7 +1217,7 @@ extension V2EXClient {
         cookie: String? = nil,
         userAgent: String = V2EXClient.mobileUserAgent
     ) async throws -> String {
-        var request = URLRequest(url: URL(string: "https://www.v2ex.com" + path)!)
+        var request = URLRequest(url: V2EXEndpoint.url(path))
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         if let cookie { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
         let (data, response) = try await webSession.data(for: request)

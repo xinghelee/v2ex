@@ -63,7 +63,7 @@ struct WebLoginView: UIViewRepresentable {
         webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1"
         context.coordinator.attach(to: webView)
         proxy?.webView = webView
-        webView.load(URLRequest(url: URL(string: "https://www.v2ex.com/signin")!))
+        webView.load(URLRequest(url: V2EXEndpoint.url("/signin")))
         return webView
     }
 
@@ -117,8 +117,8 @@ struct WebLoginView: UIViewRepresentable {
         /// URL 跳转判断。这里等登录表单消失后抓取 Cookie，再访问 `/settings`
         /// 验证会话确实有效；Cookie 写入稍有延迟时会短暂重试。
         private func detectLogin(in webView: WKWebView, retriesRemaining: Int) {
-            let host = webView.url?.host?.lowercased()
-            guard host == "v2ex.com" || host == "www.v2ex.com" else { return }
+            guard let host = webView.url?.host?.lowercased(),
+                  V2EXEndpoint.webHosts.contains(host) else { return }
             // 两步验证页顶部已经渲染登录态导航，会话却只是半登录——而且它的表单
             // action 是 /2fa、验证码输入框不是 password，下面的 loginFormVisible
             // 一个都探测不到。在这里判成功会把一个发不了帖的 cookie 存进 Keychain，
@@ -164,7 +164,7 @@ struct WebLoginView: UIViewRepresentable {
                         self.setVerifying(!loginFormVisible)
 
                         let activeV2EXCookies = cookies.filter { cookie in
-                            cookie.domain.contains("v2ex.com") &&
+                            cookie.domain.contains(V2EXEndpoint.cookieDomain) &&
                             (cookie.expiresDate.map { $0 > Date() } ?? true)
                         }
                         let cookie = activeV2EXCookies
