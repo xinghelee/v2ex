@@ -11,6 +11,7 @@ enum V2EXError: LocalizedError {
     case replyFailed(String)
     case postFailed(String)
     case blockFailed(String)
+    case nodeFollowFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +28,7 @@ enum V2EXError: LocalizedError {
         case .replyFailed(let detail): return "回复失败：\(detail)"
         case .postFailed(let detail): return detail
         case .blockFailed(let detail): return detail
+        case .nodeFollowFailed(let detail): return detail
         }
     }
 }
@@ -73,7 +75,7 @@ actor V2EXClient {
     private(set) var rateLimitRemaining: Int?
     private(set) var rateLimitReset: Date?
 
-    init() {
+    init(webSession: URLSession? = nil) {
         let configuration = URLSessionConfiguration.default
         configuration.requestCachePolicy = .useProtocolCachePolicy
         let responseCache = URLCache(memoryCapacity: 8 << 20, diskCapacity: 64 << 20)
@@ -98,7 +100,7 @@ actor V2EXClient {
         #if DEBUG && targetEnvironment(simulator)
         if ModerationReplay.scenario != nil { webConfiguration.protocolClasses = [ModerationReplayProtocol.self] }
         #endif
-        webSession = URLSession(configuration: webConfiguration)
+        self.webSession = webSession ?? URLSession(configuration: webConfiguration)
 
         decoder = JSONDecoder()
     }
@@ -365,7 +367,7 @@ actor V2EXClient {
 
     func notificationReadState(cookie: String, account: String) async throws -> WebsiteNotificationState {
         guard !cookie.isEmpty else { throw V2EXError.sessionExpired }
-        let html = try await memberBlockHTML(path: "/", cookie: cookie, userAgent: Self.desktopUserAgent)
+        let html = try await authenticatedHTML(path: "/", cookie: cookie, userAgent: Self.desktopUserAgent)
         guard let state = WebsiteNotificationState(html: html) else {
             throw V2EXError.decoding("无法读取官网未读提醒，请重新登录后重试")
         }
@@ -378,7 +380,7 @@ actor V2EXClient {
     func markNotificationsRead(cookie: String, account: String) async throws -> WebsiteNotificationState {
         // Verify the cookie account before visiting the page that clears its unread counter.
         _ = try await notificationReadState(cookie: cookie, account: account)
-        let html = try await memberBlockHTML(path: "/notifications", cookie: cookie, userAgent: Self.desktopUserAgent)
+        let html = try await authenticatedHTML(path: "/notifications", cookie: cookie, userAgent: Self.desktopUserAgent)
         guard html.contains("/notifications?p="), WebsiteNotificationState(html: html)?.username.lowercased() == account.lowercased() else {
             throw V2EXError.decoding("官网未确认提醒页面，请重试")
         }
@@ -964,7 +966,7 @@ extension V2EXClient {
         let before = try await memberBlockPage(path: path, cookie: cookie)
         guard before.blocked != blocked else { return }
 
-        _ = try await memberBlockHTML(path: before.actionPath, cookie: cookie, referer: path)
+        _ = try await authenticatedHTML(path: before.actionPath, cookie: cookie, referer: path)
         let after = try await memberBlockPage(path: path, cookie: cookie)
         guard after.memberID == before.memberID, after.blocked == blocked else {
             throw V2EXError.blockFailed("官网尚未确认\(blocked ? "屏蔽" : "取消屏蔽")，请重试")
@@ -972,14 +974,14 @@ extension V2EXClient {
     }
 
     private func memberBlockPage(path: String, cookie: String) async throws -> MemberBlockPage {
-        let html = try await memberBlockHTML(path: path, cookie: cookie)
+        let html = try await authenticatedHTML(path: path, cookie: cookie)
         guard let page = MemberBlockPage(html: html) else {
             throw V2EXError.blockFailed("未找到官网屏蔽按钮，请确认登录仍有效、用户存在且不是你自己")
         }
         return page
     }
 
-    private func memberBlockHTML(path: String, cookie: String, referer: String? = nil,
+    private func authenticatedHTML(path: String, cookie: String, referer: String? = nil,
                                  userAgent: String = V2EXClient.mobileUserAgent) async throws -> String {
         var request = URLRequest(url: V2EXEndpoint.url(path), cachePolicy: .reloadIgnoringLocalCacheData)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
@@ -1000,7 +1002,7 @@ extension V2EXClient {
     /// 官网桌面首页包含当前账号的完整 blocked ID 数组，设置页只有人数。
     func blockedUsers(cookie: String) async throws -> WebsiteBlockSnapshot {
         guard !cookie.isEmpty else { throw V2EXError.sessionExpired }
-        let html = try await memberBlockHTML(path: "/", cookie: cookie, userAgent: Self.desktopUserAgent)
+        let html = try await authenticatedHTML(path: "/", cookie: cookie, userAgent: Self.desktopUserAgent)
         guard let ids = WebsiteBlockList.ids(from: html) else {
             throw V2EXError.blockFailed("无法读取官网屏蔽名单，请确认网页登录有效后重试")
         }
@@ -1132,11 +1134,39 @@ extension V2EXClient {
     }
 
 
+    /// 使用节点页当次提供的收藏链接和 once，按目标状态操作，重试不会反向切换。
+    func setNodeFollowing(name: String, following: Bool, cookie: String) async throws {
+        guard !cookie.isEmpty else { throw V2EXError.sessionExpired }
+        guard name.range(of: #"^[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil else {
+            throw V2EXError.nodeFollowFailed("节点名称无效")
+        }
+        let path = "/go/\(name)"
+        let before = try await nodeFavoritePage(path: path, cookie: cookie)
+        guard before.following != following else { return }
+        try Task.checkCancellation()
+        _ = try await authenticatedHTML(path: before.actionPath, cookie: cookie, referer: path)
+        let after = try await nodeFavoritePage(path: path, cookie: cookie)
+        guard after.nodeID == before.nodeID, after.following == following else {
+            throw V2EXError.nodeFollowFailed("官网尚未确认\(following ? "关注" : "取消关注")，请重试")
+        }
+    }
+
+    private func nodeFavoritePage(path: String, cookie: String) async throws -> NodeFavoritePage {
+        let html = try await authenticatedHTML(path: path, cookie: cookie)
+        guard let page = NodeFavoritePage(html: html) else {
+            if html.range(of: #"href\s*=\s*["']/signin(?:[?"'])"#, options: .regularExpression) != nil {
+                throw V2EXError.sessionExpired
+            }
+            throw V2EXError.nodeFollowFailed("无法读取官网节点关注状态，请确认节点可访问后重试")
+        }
+        return page
+    }
+
     /// 网页「我收藏的节点」——API 2.0 没有关注节点接口，从 /my/nodes 抓取。
     /// 节点链接形如 `<a href="/go/programmer">程序员</a>`，href 就是 API 的
     /// 英文 node name。未登录（被重定向到 /signin）时抛 sessionExpired。
     func favoriteNodes(cookie: String) async throws -> [String] {
-        let html = try await webHTML(path: "/my/nodes", cookie: cookie)
+        let html = try await authenticatedHTML(path: "/my/nodes", cookie: cookie)
         guard !html.contains("You need to sign in"), !html.contains("/signin") else {
             Self.log("favoriteNodes: not signed in")
             throw V2EXError.sessionExpired
@@ -1366,6 +1396,39 @@ extension V2EXClient {
             return nil
         }
         return String(html[Range(match.range(at: 1), in: html)!])
+    }
+}
+
+/// 只接受节点收藏按钮的完整站内链接；缺少按钮不能推断为「未关注」。
+struct NodeFavoritePage: Equatable {
+    let following: Bool
+    let nodeID: String
+    let actionPath: String
+
+    init?(html: String) {
+        guard let links = try? NSRegularExpression(
+            pattern: #"<a\b([^>]*)>([\s\S]*?)</a>"#, options: .caseInsensitive
+        ), let href = try? NSRegularExpression(pattern: #"(?:^|\s)href\s*=\s*["'](/(favorite|unfavorite)/node/([1-9]\d*)\?once=\d+)["']"#)
+        else { return nil }
+        var candidates: [(following: Bool, nodeID: String, path: String)] = []
+        let source = html as NSString
+        for link in links.matches(in: html, range: NSRange(location: 0, length: source.length)) {
+            let attributes = source.substring(with: link.range(at: 1))
+            guard let match = href.firstMatch(in: attributes, range: NSRange(attributes.startIndex..., in: attributes)) else { continue }
+            let text = attributes as NSString
+            let isFollowing = text.substring(with: match.range(at: 2)) == "unfavorite"
+            let label = source.substring(with: link.range(at: 2))
+                .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let labels = isFollowing ? ["取消收藏", "unfavorite"] : ["加入收藏", "favorite this node"]
+            guard labels.contains(label) else { continue }
+            candidates.append((isFollowing, text.substring(with: match.range(at: 3)), text.substring(with: match.range(at: 1))))
+        }
+        guard let first = candidates.first,
+              candidates.allSatisfy({ $0.following == first.following && $0.nodeID == first.nodeID && $0.path == first.path }) else { return nil }
+        following = first.following
+        nodeID = first.nodeID
+        actionPath = first.path
     }
 }
 

@@ -52,6 +52,8 @@ struct NodesView: View {
 
     @StateObject private var model = NodesViewModel()
     @EnvironmentObject private var followed: FollowedNodesStore
+    @EnvironmentObject private var session: V2EXSessionStore
+    @State private var followError: String?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isEditingFollowed = false
@@ -84,6 +86,14 @@ struct NodesView: View {
                 }
             }
             .task { await model.load() }
+            .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: followed.names)
+            .alert("取消关注失败", isPresented: Binding(
+                get: { followError != nil }, set: { if !$0 { followError = nil } }
+            )) {
+                Button("好", role: .cancel) { followError = nil }
+            } message: {
+                Text(followError ?? "")
+            }
     }
 
     @ViewBuilder
@@ -197,13 +207,20 @@ struct NodesView: View {
                     Button {
                         removeFollowedNode(name)
                     } label: {
-                        Image(systemName: "minus.circle.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(Theme.unreadDot)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                        Group {
+                            if followed.updatingNames.contains(name) {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "minus.circle.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(Theme.unreadDot)
+                            }
+                        }
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .disabled(followed.updatingNames.contains(name))
                     .accessibilityLabel("取消关注 \(title)")
                     .accessibilityHint("从我关注的节点中移除")
                     .offset(x: 8, y: -8)
@@ -246,10 +263,12 @@ struct NodesView: View {
     }
 
     private func removeFollowedNode(_ name: String) {
-        if reduceMotion {
-            followed.remove(name)
-        } else {
-            withAnimation(.snappy(duration: 0.2)) { followed.remove(name) }
+        Task {
+            do {
+                try await followed.setFollowing(name, following: false, session: session)
+            } catch {
+                followError = error.localizedDescription
+            }
         }
     }
 

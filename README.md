@@ -47,6 +47,8 @@
 | sov2ex | 社区全文索引，V2EX 无官方搜索接口 |
 | iOS 26 | 原生 Tab、`safeAreaBar`、`glassEffect`、边缘滚动效果与标签栏自动收起；低版本经 `iOS26Compat` 自动降级（`safeAreaInset`、`ultraThinMaterial`、`borderedProminent`） |
 | iOS 27 | Foundation Models 设备端摘要、App Intents/Siri 深链与 Spotlight 语义入口（渐进增强） |
+
+节点关注：未登录时保存在本机；网页登录后，关注和取消关注会提交到 V2EX 网页接口，确认官网状态后更新本地，失败时保留原状态并提示。设置中的「自动导入网页关注节点」只控制网页收藏列表的导入，不影响手动关注操作写入官网；此前的本地关注不会自动批量上传。
 | AI 回退 | 用户可选配置 DeepSeek、硅基流动、OpenAI 或任意 OpenAI 兼容 API；Key 仅存 Keychain |
 | 多设备 | iPhone 竖屏、iPad 全方向；宽屏内容自动居中为 720pt 可读栏 |
 | iPad 双栏 | 宽屏（横屏/大窗）话题详情正文与楼层回复左右分栏、各自独立滚动 |

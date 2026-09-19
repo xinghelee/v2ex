@@ -67,6 +67,10 @@ final class TokenStore: ObservableObject {
 @MainActor
 final class FollowedNodesStore: ObservableObject {
     @Published private(set) var names: [String] = []
+    @Published private(set) var updatingNames: Set<String> = []
+    private let preferences: UserDefaults
+    private let client: V2EXClient
+    private var revision = 0
 
     private let key = "followedNodes"
     /// 本地取消关注的节点（含删掉的默认种子），同步时从网页收藏里排除——
@@ -76,55 +80,72 @@ final class FollowedNodesStore: ObservableObject {
     /// Seeded so a fresh install has a meaningful 关注 tab, matching the design.
     private let defaults = ["programmer", "create", "apple", "coffee", "autistic"]
 
-    init() {
-        if let stored = UserDefaults.standard.stringArray(forKey: key) {
+    init(preferences: UserDefaults = .standard, client: V2EXClient = .shared) {
+        self.preferences = preferences
+        self.client = client
+        if let stored = preferences.stringArray(forKey: key) {
             names = stored
         } else {
             names = defaults
             persist()
         }
-        removedFromSync = Set(UserDefaults.standard.stringArray(forKey: removedKey) ?? [])
+        removedFromSync = Set(preferences.stringArray(forKey: removedKey) ?? [])
     }
 
     func isFollowing(_ name: String) -> Bool { names.contains(name) }
 
-    func toggle(_ name: String) {
-        if let index = names.firstIndex(of: name) {
-            names.remove(at: index)
-            removedFromSync.insert(name)
-        } else {
-            names.append(name)
+    /// 已登录时等待官网确认；未登录时仍可管理本地节点。所有入口共用并发保护。
+    func setFollowing(_ name: String, following: Bool, session: V2EXSessionStore) async throws {
+        guard updatingNames.insert(name).inserted else { return }
+        revision += 1
+        defer {
+            updatingNames.remove(name)
+            revision += 1
+        }
+        let cookie = session.cookie
+        let username = session.username
+        if !cookie.isEmpty {
+            try await client.setNodeFollowing(name: name, following: following, cookie: cookie)
+            guard session.cookie == cookie, session.username == username else {
+                throw V2EXError.nodeFollowFailed("登录账号已更改，请重新操作")
+            }
+        }
+        if following {
+            if !names.contains(name) { names.append(name) }
             removedFromSync.remove(name)
+        } else {
+            names.removeAll { $0 == name }
+            removedFromSync.insert(name)
         }
         persist()
     }
 
-    func remove(_ name: String) {
-        names.removeAll { $0 == name }
-        removedFromSync.insert(name)
-        persist()
-    }
-
     func move(from source: IndexSet, to destination: Int) {
+        revision += 1
         names.move(fromOffsets: source, toOffset: destination)
         persist()
     }
 
     private func persist() {
-        UserDefaults.standard.set(names, forKey: key)
-        UserDefaults.standard.set(Array(removedFromSync), forKey: removedKey)
+        preferences.set(names, forKey: key)
+        preferences.set(Array(removedFromSync), forKey: removedKey)
     }
 
     /// 拉取网页「我收藏的节点」并合并：远程（网页收藏）按顺序在前，本地独有
     /// （app 内添加、网页没收藏）保留在末尾。未登录或抓取失败静默跳过。
-    func syncFromRemote(cookie: String) async {
-        guard !cookie.isEmpty else { return }
-        guard let remote = try? await V2EXClient.shared.favoriteNodes(cookie: cookie),
-              !remote.isEmpty else { return }
+    func syncFromRemote(session: V2EXSessionStore) async {
+        let cookie = session.cookie
+        let username = session.username
+        let startedAt = revision
+        guard !cookie.isEmpty, updatingNames.isEmpty else { return }
+        guard let remote = try? await client.favoriteNodes(cookie: cookie),
+              !remote.isEmpty, updatingNames.isEmpty, revision == startedAt,
+              session.cookie == cookie, session.username == username else { return }
         let incoming = remote.filter { !removedFromSync.contains($0) }
         let merged = incoming + names.filter { !incoming.contains($0) }
         var seen = Set<String>()
         names = merged.filter { seen.insert($0).inserted }
+        revision += 1
         persist()
     }
 }

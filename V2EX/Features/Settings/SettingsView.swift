@@ -10,7 +10,7 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                PageIntro(text: "账号连接、外观与阅读偏好都在这里。数据全部存在本机。")
+                PageIntro(text: "账号连接、外观与阅读偏好都在这里。登录后，回复、收藏与节点关注会同步到 V2EX。")
 
                 // 账号排在最前：它是这页唯一有"状态"的东西，也是出问题时
                 // 用户来设置里要找的答案。偏好类的项每天都在用，但不需要
@@ -36,7 +36,7 @@ struct SettingsView: View {
                                 title: "V2EX 登录",
                                 subtitle: session.isLoggedIn
                                     ? "\(session.username) · 已登录"
-                                    : "未登录（用于 app 内回复）"
+                                    : "未登录（用于回复、收藏与关注同步）"
                             ) { Chevron() }
                         }
                         .buttonStyle(.row)
@@ -46,13 +46,13 @@ struct SettingsView: View {
                         // 偏好项下面，读起来像是和外观、阅读并列的东西。
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
-                                Text("自动同步关注节点")
+                                Text("自动导入网页关注节点")
                                     .font(.system(size: 17))
                                     .kerning(-0.43)
                                     .foregroundStyle(Theme.ink)
                                 Text(session.isLoggedIn
-                                    ? "登录 \(session.username) 后自动同步网页收藏的节点"
-                                    : "登录 V2EX 后自动同步网页收藏的节点")
+                                    ? "导入 \(session.username) 收藏的节点；关注操作始终同步到官网"
+                                    : "登录后可导入网页收藏；当前关注仅保存在本机")
                                     .font(.system(size: 12))
                                     .foregroundStyle(Theme.muted)
                             }

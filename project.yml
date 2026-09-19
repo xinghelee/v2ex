@@ -29,6 +29,8 @@ schemes:
       config: Debug
     test:
       config: Debug
+      targets:
+        - V2EXTests
     profile:
       config: Release
     analyze:
@@ -37,6 +39,16 @@ schemes:
       config: Release
 
 targets:
+  V2EXTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: V2EXTests
+    dependencies:
+      - target: V2EX
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
   V2EX:
     type: application
     platform: iOS

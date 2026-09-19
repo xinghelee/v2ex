@@ -161,9 +161,9 @@ struct RootView: View {
             await moderation.refreshWebsiteBlocks(session: session)
         }
         // 登录后把网页收藏的节点同步到本地（自动同步开关控制）。
-        .task(id: session.isLoggedIn) {
+        .task(id: session.cookie + ":" + session.username + ":" + String(settings.autoSyncFollowedNodes)) {
             guard settings.autoSyncFollowedNodes else { return }
-            await followed.syncFromRemote(cookie: session.cookie)
+            await followed.syncFromRemote(session: session)
         }
         .task(id: autoOfflineTaskID) {
             await syncAutomaticOffline()

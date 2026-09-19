@@ -101,6 +101,8 @@ struct NodeDetailView: View {
 
     @StateObject private var model = NodeDetailViewModel()
     @EnvironmentObject private var followed: FollowedNodesStore
+    @EnvironmentObject private var session: V2EXSessionStore
+    @State private var followError: String?
     @EnvironmentObject private var token: TokenStore
     @EnvironmentObject private var readState: ReadStateStore
     @EnvironmentObject private var offline: OfflineStore
@@ -148,13 +150,14 @@ struct NodeDetailView: View {
                         Label("在 V2EX 打开", systemImage: "safari")
                     }
                     Button {
-                        followed.toggle(nodeName)
+                        toggleFollow()
                     } label: {
                         Label(
                             followed.isFollowing(nodeName) ? "取消关注" : "关注节点",
                             systemImage: followed.isFollowing(nodeName) ? "star.slash" : "star"
                         )
                     }
+                    .disabled(followed.updatingNames.contains(nodeName))
                 } label: {
                     Image(systemName: "ellipsis")
                         .foregroundStyle(Theme.body)
@@ -162,6 +165,13 @@ struct NodeDetailView: View {
             }
         }
         .task { await model.load(name: nodeName, token: token.token) }
+        .alert("关注操作失败", isPresented: Binding(
+            get: { followError != nil }, set: { if !$0 { followError = nil } }
+        )) {
+            Button("好", role: .cancel) { followError = nil }
+        } message: {
+            Text(followError ?? "")
+        }
     }
 
     private var headerCard: some View {
@@ -210,9 +220,15 @@ struct NodeDetailView: View {
     private var followButton: some View {
         let isFollowing = followed.isFollowing(nodeName)
         return Button {
-            withAnimation(.snappy) { followed.toggle(nodeName) }
+            toggleFollow()
         } label: {
-            Text(isFollowing ? "已关注" : "关注")
+            HStack(spacing: 6) {
+                if followed.updatingNames.contains(nodeName) {
+                    ProgressView().controlSize(.small)
+                        .tint(isFollowing ? Theme.accent : .white)
+                }
+                Text(isFollowing ? "已关注" : "关注")
+            }
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(isFollowing ? Theme.accent : Color.white)
                 .padding(.horizontal, 16)
@@ -221,6 +237,19 @@ struct NodeDetailView: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.row)
+        .disabled(followed.updatingNames.contains(nodeName))
+        .accessibilityHint(session.isLoggedIn ? "同步到 V2EX 收藏的节点" : "保存在本机，登录后可同步到 V2EX")
+    }
+
+    private func toggleFollow() {
+        let following = !followed.isFollowing(nodeName)
+        Task {
+            do {
+                try await followed.setFollowing(nodeName, following: following, session: session)
+            } catch {
+                followError = error.localizedDescription
+            }
+        }
     }
 
     private func stat(value: Int, label: String) -> some View {
