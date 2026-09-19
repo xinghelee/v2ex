@@ -1,5 +1,15 @@
 import SwiftUI
 
+extension TabRole {
+    /// iOS 27 的 search 不保证独立显示，使用 prominent 固定为右侧独立入口。
+    static var separateSearch: TabRole {
+        if #available(iOS 27.0, *) {
+            return .prominent
+        }
+        return .search
+    }
+}
+
 // MARK: - iOS 26 API 兼容层
 //
 // 工程最低版本支持 iOS 18，同时尽量保留 iOS 26 的原生 Liquid Glass 体验。
@@ -43,12 +53,12 @@ extension View {
         }
     }
 
-    /// 底部边缘柔化回弹：iOS 26 专属装饰效果，低版本直接忽略。
-    /// 对应 `.scrollEdgeEffectStyle(.soft, for: .bottom)`。
+    /// 统一使用柔和滚动边缘，避免外观随系统默认值变化；低版本直接忽略。
+    /// 在应用入口设置，由层级内的滚动视图继承。
     @ViewBuilder
-    func softBottomEdgeEffect() -> some View {
+    func softScrollEdgeEffect() -> some View {
         if #available(iOS 26.0, *) {
-            scrollEdgeEffectStyle(.soft, for: .bottom)
+            scrollEdgeEffectStyle(.soft, for: .all)
         } else {
             self
         }

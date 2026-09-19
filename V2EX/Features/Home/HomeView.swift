@@ -352,7 +352,6 @@ struct HomeView: View {
             .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
-        .softBottomEdgeEffect()
         .pullToRefresh(isEnabled: model.feed == feed) {
             await model.load(feed: feed, followedNodes: followed.names, force: true)
         }

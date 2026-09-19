@@ -113,11 +113,12 @@ struct RootView: View {
                             }
                     }
                     .environment(\.openURL, memberLinkAction(for: tab))
+                    .environment(\.openContentURL, contentLinkAction(for: tab))
                 }
                 .badge(tab == .notifications ? notifications.unreadCount : 0)
             }
 
-            Tab("搜索", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
+            Tab("搜索", systemImage: "magnifyingglass", value: AppTab.search, role: .separateSearch) {
                 NavigationStack(path: binding(for: .search)) {
                     SearchView(request: searchRequest)
                         .navigationDestination(for: Route.self) { route in
@@ -125,6 +126,7 @@ struct RootView: View {
                         }
                 }
                 .environment(\.openURL, memberLinkAction(for: .search))
+                .environment(\.openContentURL, contentLinkAction(for: .search))
             }
         }
         .keepTabBarExpanded()
@@ -225,6 +227,34 @@ struct RootView: View {
             paths[tab, default: NavigationPath()].append(Route.member(username))
             return .handled
         }
+    }
+
+    /// 正文链接在当前标签继续阅读；工具栏「在 V2EX 打开」仍使用普通 openURL。
+    private func contentLinkAction(for tab: AppTab) -> OpenURLAction {
+        OpenURLAction { url in
+            if let id = Self.linkedTopic(in: url) {
+                paths[tab, default: NavigationPath()].append(Route.topic(id))
+                return .handled
+            }
+            if let username = Self.mentionedMember(in: url) {
+                paths[tab, default: NavigationPath()].append(Route.member(username))
+                return .handled
+            }
+            return .systemAction
+        }
+    }
+
+    static func linkedTopic(in url: URL) -> Int? {
+        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = url.host()?.lowercased(), V2EXEndpoint.webHosts.contains(host),
+              url.user == nil, url.password == nil,
+              url.port == nil || url.port == (scheme == "https" ? 443 : 80) else { return nil }
+        // 查询参数和 #replyN 不影响帖子 ID；兼容旧版 .html 永久链接。
+        guard let match = url.path.range(of: #"^/t/[0-9]+(?:\.html)?/?$"#, options: .regularExpression) else { return nil }
+        let path = String(url.path[match])
+        let value = path.dropFirst(3).split(separator: "/").first?.replacingOccurrences(of: ".html", with: "") ?? ""
+        guard let id = Int(value), id > 0 else { return nil }
+        return id
     }
 
     static func mentionedMember(in url: URL) -> String? {

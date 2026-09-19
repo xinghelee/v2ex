@@ -110,7 +110,6 @@ struct ProfileView: View {
             .padding(.bottom, 100)
         }
         .scrollIndicators(.hidden)
-        .softBottomEdgeEffect()
         .pullToRefresh { await model.load(token: token.token, sessionUsername: session.username) }
         .background(Theme.canvas)
         .navigationTitle("我的")

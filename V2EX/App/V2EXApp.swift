@@ -23,6 +23,7 @@ struct V2EXApp: App {
     var body: some Scene {
         WindowGroup {
             mainView
+                .softScrollEdgeEffect()
                 .environmentObject(settings)
                 .environmentObject(token)
                 .environmentObject(session)

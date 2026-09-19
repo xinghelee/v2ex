@@ -374,6 +374,18 @@ private struct ContentImage: View {
     }
 }
 
+private struct OpenContentURLKey: EnvironmentKey {
+    static let defaultValue: OpenURLAction? = nil
+}
+
+extension EnvironmentValues {
+    /// 只用于阅读内容中的链接，与显式打开网页的按钮分开。
+    var openContentURL: OpenURLAction? {
+        get { self[OpenContentURLKey.self] }
+        set { self[OpenContentURLKey.self] = newValue }
+    }
+}
+
 struct ContentBlocksView: View {
     private struct PreviewImage: Identifiable {
         let id = UUID()
@@ -384,6 +396,8 @@ struct ContentBlocksView: View {
     var fontSize: CGFloat? = nil
     var lineSpacing: CGFloat? = nil
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.openURL) private var openURL
+    @Environment(\.openContentURL) private var openContentURL
     @State private var previewImage: PreviewImage?
 
     private var baseSize: CGFloat { fontSize ?? settings.bodyFontSize }
@@ -459,6 +473,7 @@ struct ContentBlocksView: View {
                 }
             }
         }
+        .environment(\.openURL, openContentURL ?? openURL)
         .fullScreenCover(item: $previewImage) { preview in
             FullScreenImagePreview(url: preview.url)
         }
