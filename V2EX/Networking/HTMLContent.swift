@@ -322,7 +322,7 @@ enum HTMLText {
         var value = raw.trimmingCharacters(in: .whitespaces)
         guard !value.isEmpty else { return nil }
         if value.hasPrefix("//") { value = "https:" + value }
-        else if value.hasPrefix("/") { value = "https://www.v2ex.com" + value }
+        else if value.hasPrefix("/") { value = V2EXEndpoint.officialBase + value }
         return URL(string: value)
     }
 

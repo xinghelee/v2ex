@@ -357,7 +357,7 @@ private struct ContentImage: View {
             return
         }
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(from: V2EXEndpoint.routed(url))
             guard !Task.isCancelled,
                   let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode),
@@ -489,7 +489,7 @@ private struct FullScreenImagePreview: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            AsyncImage(url: url) { phase in
+            AsyncImage(url: V2EXEndpoint.routed(url)) { phase in
                 switch phase {
                 case .success(let image):
                     ZoomablePreviewImage(image: image)

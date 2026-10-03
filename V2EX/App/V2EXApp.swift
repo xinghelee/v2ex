@@ -42,6 +42,9 @@ struct V2EXApp: App {
                 .environmentObject(history)
                 .preferredColorScheme(settings.theme.colorScheme)
                 .tint(Theme.accent)
+                // 配了反代时，「在 V2EX 打开」之类交给浏览器的官方地址也换成反代，
+                // 否则用户在浏览器里同样打不开。标签页内的 openURL 另有处理。
+                .environment(\.openURL, OpenURLAction { .systemAction(V2EXEndpoint.routed($0)) })
                 .alert("官网屏蔽同步", isPresented: Binding(
                     get: { moderation.websiteNotice != nil },
                     set: { if !$0 { moderation.websiteNotice = nil } }

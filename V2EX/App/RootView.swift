@@ -57,6 +57,7 @@ enum Route: Hashable {
     case appearance
     case reading
     case aiConfiguration
+    case customDomain
     case tokenSetup
     case v2exLogin
 }
@@ -223,7 +224,9 @@ struct RootView: View {
     /// explicit "在 V2EX 打开" buttons pass to `openURL`, and those mean it.
     private func memberLinkAction(for tab: AppTab) -> OpenURLAction {
         OpenURLAction { url in
-            guard let username = Self.mentionedMember(in: url) else { return .systemAction }
+            guard let username = Self.mentionedMember(in: url) else {
+                return .systemAction(V2EXEndpoint.routed(url))
+            }
             paths[tab, default: NavigationPath()].append(Route.member(username))
             return .handled
         }
@@ -240,15 +243,12 @@ struct RootView: View {
                 paths[tab, default: NavigationPath()].append(Route.member(username))
                 return .handled
             }
-            return .systemAction
+            return .systemAction(V2EXEndpoint.routed(url))
         }
     }
 
     static func linkedTopic(in url: URL) -> Int? {
-        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
-              let host = url.host()?.lowercased(), V2EXEndpoint.webHosts.contains(host),
-              url.user == nil, url.password == nil,
-              url.port == nil || url.port == (scheme == "https" ? 443 : 80) else { return nil }
+        guard V2EXEndpoint.isSiteURL(url) else { return nil }
         // 查询参数和 #replyN 不影响帖子 ID；兼容旧版 .html 永久链接。
         guard let match = url.path.range(of: #"^/t/[0-9]+(?:\.html)?/?$"#, options: .regularExpression) else { return nil }
         let path = String(url.path[match])
@@ -258,8 +258,7 @@ struct RootView: View {
     }
 
     static func mentionedMember(in url: URL) -> String? {
-        guard let host = url.host()?.lowercased(),
-              host == "v2ex.com" || host == "www.v2ex.com" else { return nil }
+        guard V2EXEndpoint.isSiteURL(url) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
         guard parts.count == 2, parts[0] == "member", !parts[1].isEmpty else { return nil }
         return parts[1]
@@ -359,6 +358,7 @@ struct RootView: View {
         case .appearance: AppearanceSettingsView()
         case .reading: ReadingSettingsView()
         case .aiConfiguration: AIConfigurationView()
+        case .customDomain: CustomDomainView()
         case .tokenSetup: TokenSetupView()
         case .v2exLogin: V2EXLoginView()
         }

@@ -374,7 +374,7 @@ enum TopicShareCardRenderer {
     static func avatar(for url: URL?) async -> UIImage? {
         guard let url else { return nil }
         if let cached = RemoteImageMemoryCache.image(for: url) { return cached }
-        guard let (data, response) = try? await URLSession.shared.data(from: url),
+        guard let (data, response) = try? await URLSession.shared.data(from: V2EXEndpoint.routed(url)),
               let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode),
               let image = UIImage(data: data) else { return nil }

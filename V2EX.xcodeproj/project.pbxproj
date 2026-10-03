@@ -10,6 +10,7 @@
 		0D8EADE531DACCC9A8FF6E36 /* ModerationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B902B26459E7523CE1BFEC5E /* ModerationSettingsView.swift */; };
 		15B0CF068B12A4E6FA4D407E /* V2EX.icon in Resources */ = {isa = PBXBuildFile; fileRef = 25EE905BC783A14059F53387 /* V2EX.icon */; };
 		1F78C3DC3E570CB4FB4DEB28 /* HTMLContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81F6BD7C210C928142B5902 /* HTMLContent.swift */; };
+		248E27B5665B1D3DE8B94970 /* CustomDomainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3B84980772339101412FD07 /* CustomDomainView.swift */; };
 		2A769EB31609EB038AEA5869 /* HNTranslator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED5C587415F7069DC20EA06 /* HNTranslator.swift */; };
 		2C7639CB4688CFFDD8FE95EB /* SpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 013392DC75CD088995B1030B /* SpotlightIndexer.swift */; };
 		2EA907F51E2A5D358921547A /* AutoOfflineCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01504C8158B37F075D03E76E /* AutoOfflineCoordinator.swift */; };
@@ -42,6 +43,7 @@
 		98FA67B2046C4A5E714DBCE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1F88CCAC289B75CC5650EB33 /* Assets.xcassets */; };
 		9DCD12E6658B8BD7BED27585 /* NodeCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE83FEFC96FFE2B53972D0CA /* NodeCatalog.swift */; };
 		A61F229B508D36025A4FAA79 /* ReadingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33525BBBEC560134B5B0A656 /* ReadingSettingsView.swift */; };
+		AA20419B760ADE73BA40DB20 /* CustomEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A4743BB56BF8215D1A511D /* CustomEndpointTests.swift */; };
 		AA82A2ABA2280EE18F23C7C9 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D3D18A35A705E7C96685502 /* HomeView.swift */; };
 		B5741F8585995FAD7A5644EF /* AIConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8495078C84D6A758F900CA12 /* AIConfigurationStore.swift */; };
 		B853F2282EDDB3C31B184BE6 /* WebLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 599F3445401BCF070618A7AD /* WebLoginView.swift */; };
@@ -102,6 +104,7 @@
 		816AD882308D6AD186686D63 /* HNDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HNDetailView.swift; sourceTree = "<group>"; };
 		8495078C84D6A758F900CA12 /* AIConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfigurationStore.swift; sourceTree = "<group>"; };
 		87AF26D4D20B392C500B6CB1 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
+		88A4743BB56BF8215D1A511D /* CustomEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomEndpointTests.swift; sourceTree = "<group>"; };
 		89C46495D17D32EB0BB09C97 /* LaunchAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAnimationView.swift; sourceTree = "<group>"; };
 		8F96F5B8B7B39B4037AC549F /* HNTranslationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HNTranslationCache.swift; sourceTree = "<group>"; };
 		93E4A96B18170241FB29F008 /* ContentLinkRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentLinkRoutingTests.swift; sourceTree = "<group>"; };
@@ -114,6 +117,7 @@
 		A956C7B8A60FAB06CD6D4FB2 /* TopicAISummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicAISummary.swift; sourceTree = "<group>"; };
 		AA163B321D247F9F88706930 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		AC65D82D3FC563D57CA23922 /* TopicDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicDetailViewModel.swift; sourceTree = "<group>"; };
+		B3B84980772339101412FD07 /* CustomDomainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomDomainView.swift; sourceTree = "<group>"; };
 		B81F6BD7C210C928142B5902 /* HTMLContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLContent.swift; sourceTree = "<group>"; };
 		B902B26459E7523CE1BFEC5E /* ModerationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModerationSettingsView.swift; sourceTree = "<group>"; };
 		C62736A419F41C9077510ABD /* V2EXSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2EXSessionStore.swift; sourceTree = "<group>"; };
@@ -173,6 +177,7 @@
 			isa = PBXGroup;
 			children = (
 				9454B94E936AE000AC35AEB1 /* AppearanceSettingsView.swift */,
+				B3B84980772339101412FD07 /* CustomDomainView.swift */,
 				33525BBBEC560134B5B0A656 /* ReadingSettingsView.swift */,
 				952ED920E11A6B7AB4548070 /* SettingsView.swift */,
 				DE43160F1E2E5D55DFDD961B /* V2EXLoginView.swift */,
@@ -281,6 +286,7 @@
 			isa = PBXGroup;
 			children = (
 				93E4A96B18170241FB29F008 /* ContentLinkRoutingTests.swift */,
+				88A4743BB56BF8215D1A511D /* CustomEndpointTests.swift */,
 				277100A13A4163C35603227F /* NodeFollowingTests.swift */,
 			);
 			path = V2EXTests;
@@ -454,6 +460,7 @@
 				2EA907F51E2A5D358921547A /* AutoOfflineCoordinator.swift in Sources */,
 				956D703BF0A8AE874156964E /* Components.swift in Sources */,
 				8287A655678BAA296EE59879 /* ComposeView.swift in Sources */,
+				248E27B5665B1D3DE8B94970 /* CustomDomainView.swift in Sources */,
 				D46372D9C30049B54BB4352C /* HNClient.swift in Sources */,
 				65C315A7FAC19E187BE700FA /* HNDetailView.swift in Sources */,
 				8DD71F87AB9EE7B4CD1633EF /* HNLinkify.swift in Sources */,
@@ -502,6 +509,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DECB082E7628561152D2DEBD /* ContentLinkRoutingTests.swift in Sources */,
+				AA20419B760ADE73BA40DB20 /* CustomEndpointTests.swift in Sources */,
 				F44719FC901CC893180C53B3 /* NodeFollowingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -48,26 +48,148 @@ private struct V2Envelope<Value: Decodable>: Decodable {
     let result: Value?
 }
 
+/// V2EX 主站端点，以及 Issue #2 的自定义反代（部分网络环境访问不了 v2ex.com）。
+///
+/// 自定义地址只用在**发请求**和**交给浏览器打开**的那一刻：话题的永久链接
+/// （分享、收藏落盘的 `V2Topic.url`）、举报链接始终用官方域名——镜像域名是
+/// 用户的私事，不该被写进数据再扩散出去。
+enum V2EXEndpoint {
+    static let officialBase = "https://www.v2ex.com"
+    /// 头像、节点图标、站内上传图片所在的 CDN。
+    static let officialImageHost = "cdn.v2ex.com"
+    private static let officialHosts: Set<String> = ["v2ex.com", "www.v2ex.com"]
+
+    static let customBaseKey = "customV2EXBaseURL"
+    static let customImageBaseKey = "customV2EXImageBaseURL"
+
+    /// 用户配置的主站反代，形如 `scheme://host[:port]`；nil 表示官方域名。
+    static var customBase: URL? { storedOrigin(customBaseKey) }
+    /// 用户配置的图片反代，代替 `cdn.v2ex.com`；nil 表示直连官方 CDN。
+    static var customImageBase: URL? { storedOrigin(customImageBaseKey) }
+
+    /// 主站（API 1.0/2.0、网页表单、登录）。
+    static var base: String { customBase?.absoluteString ?? officialBase }
+
+    static func url(_ path: String) -> URL { URL(string: base + path)! }
+
+    /// 当前请求所走的主站 host：网页登录页只在这些 host 上判定登录态。
+    static var siteHosts: Set<String> {
+        guard let host = customBase?.host()?.lowercased() else { return officialHosts }
+        return [host]
+    }
+
+    /// 会话 cookie 是否属于当前主站。走反代时 cookie 落在反代的 host 上。
+    static func isSessionCookie(domain: String) -> Bool {
+        let domain = domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return siteHosts.contains { $0 == domain || $0.hasSuffix("." + domain) }
+    }
+
+    /// 是否是一条站内网页链接：官方域名（默认端口），或者当前配置的反代。
+    /// 正文里的帖子、@用户链接据此在 App 内打开。
+    static func isSiteURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = url.host()?.lowercased(),
+              url.user == nil, url.password == nil else { return false }
+        if officialHosts.contains(host) {
+            return url.port == nil || url.port == defaultPort(scheme)
+        }
+        guard let custom = customBase, custom.host()?.lowercased() == host else { return false }
+        return effectivePort(of: url) == effectivePort(of: custom)
+    }
+
+    /// 把官方主站、官方 CDN 的地址换成对应的反代；其他地址原样返回。
+    /// 只在真正发请求、交给浏览器时调用，存储与分享一律保留官方地址。
+    static func routed(_ url: URL) -> URL {
+        routed(url, base: customBase, imageBase: customImageBase)
+    }
+
+    static func routed(_ url: URL, base: URL?, imageBase: URL?) -> URL {
+        guard let host = url.host()?.lowercased(), url.user == nil else { return url }
+        let target = officialHosts.contains(host) ? base : host == officialImageHost ? imageBase : nil
+        guard let target,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let replacement = URLComponents(url: target, resolvingAgainstBaseURL: false) else { return url }
+        components.scheme = replacement.scheme
+        components.percentEncodedHost = replacement.percentEncodedHost
+        components.port = replacement.port
+        return components.url ?? url
+    }
+
+    /// 把设置里填的地址规范成 `scheme://host[:port]`。空串返回 nil（用官方域名）；
+    /// 省略协议时按 https 处理。带路径不行：网页里的相对链接都指向站点根目录。
+    static func parseOrigin(_ input: String) throws -> URL? {
+        var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        while text.hasSuffix("/") { text.removeLast() }
+        guard !text.isEmpty else { return nil }
+        if !text.contains("://") { text = "https://" + text }
+        guard var components = URLComponents(string: text),
+              let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = components.host, !host.isEmpty,
+              components.user == nil, components.password == nil,
+              components.path.isEmpty, components.query == nil, components.fragment == nil,
+              components.url != nil else {
+            throw EndpointInputError.invalid(input.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        components.scheme = scheme
+        return components.url
+    }
+
+    static func save(base: URL?, imageBase: URL?) {
+        // 填的就是官方地址时按未配置存，免得之后官方域名被当成反代对待。
+        let base = base.flatMap { officialHosts.contains($0.host()?.lowercased() ?? "") ? nil : $0 }
+        let imageBase = imageBase.flatMap { $0.host()?.lowercased() == officialImageHost ? nil : $0 }
+        let defaults = UserDefaults.standard
+        defaults.set(base?.absoluteString ?? "", forKey: customBaseKey)
+        defaults.set(imageBase?.absoluteString ?? "", forKey: customImageBaseKey)
+    }
+
+    private static func storedOrigin(_ key: String) -> URL? {
+        guard let value = UserDefaults.standard.string(forKey: key), !value.isEmpty else { return nil }
+        return URL(string: value)
+    }
+
+    private static func defaultPort(_ scheme: String) -> Int { scheme == "http" ? 80 : 443 }
+
+    private static func effectivePort(of url: URL) -> Int {
+        url.port ?? defaultPort(url.scheme?.lowercased() ?? "https")
+    }
+}
+
+enum EndpointInputError: LocalizedError {
+    case invalid(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalid(let value):
+            return "「\(value)」不是有效地址。只填协议、域名或 IP、端口，例如 https://v2.example.com 或 http://192.168.1.10:8080"
+        }
+    }
+}
+
+/// 连接测试的一项结果，见 `V2EXClient.probe(base:imageBase:)`。
+struct EndpointCheck: Identifiable, Sendable {
+    enum Outcome: Sendable { case passed, warning, failed }
+
+    let title: String
+    let outcome: Outcome
+    let detail: String
+    var id: String { title }
+}
+
+/// 让单个请求停在 3xx，好检查反代有没有改写 Location。
+private final class RedirectBlocker: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? {
+        nil
+    }
+}
+
 /// Talks to three surfaces:
 /// * V2EX API 1.0 — public, no auth, powers everything read-only.
 /// * V2EX API 2.0 — needs a Personal Access Token; notifications, own profile,
 ///   paginated node topics.
 /// * sov2ex — the community full-text index, since V2EX exposes no search API.
-/// V2EX 主站端点。Issue #2 希望能自定义 API 域名（部分网络环境访问不了
-/// v2ex.com），设置 UI 排在当前版本过审之后；先把网络请求侧散落的硬编码
-/// 域名收敛到这里，届时把 `base` 换成可写配置即可。
-///
-/// 只收敛**请求**：话题的永久链接（分享、收藏落盘的 `V2Topic.url`）始终
-/// 用官方域名——镜像域名是用户的私事，不该被写进数据再扩散出去。
-enum V2EXEndpoint {
-    /// 主站（API 1.0/2.0、网页表单、登录）。
-    static let base = "https://www.v2ex.com"
-    /// 会话 cookie 的域匹配、WKWebView 登录页的域名白名单。
-    static let cookieDomain = "v2ex.com"
-    static let webHosts: Set<String> = ["v2ex.com", "www.v2ex.com"]
-
-    static func url(_ path: String) -> URL { URL(string: base + path)! }
-}
 
 actor V2EXClient {
     static let shared = V2EXClient()
@@ -523,6 +645,120 @@ actor V2EXClient {
             options: .regularExpression
         ) else { return nil }
         return Int(String(html[range]).filter(\.isNumber))
+    }
+
+    // MARK: - Custom endpoint probe
+
+    /// 设置页「测试连接」：用尚未保存的地址分别走一遍 API、网页列表、网页登录
+    /// 和图片。反代常见的半成品——只转发了接口、把跳转或 Cookie 改回了
+    /// v2ex.com——表现为能看帖却登录不上，这里逐项指出来。
+    func probe(base: URL, imageBase: URL?) async -> [EndpointCheck] {
+        async let api = probeAPI(base)
+        async let login = probeLogin(base)
+        let (list, sampleAvatar) = await probeList(base)
+        let image = await probeImage(sampleAvatar, imageBase: imageBase)
+        return [await api, list, await login, image]
+    }
+
+    private func probeAPI(_ base: URL) async -> EndpointCheck {
+        let title = "API"
+        var request = URLRequest(url: URL(string: base.absoluteString + "/api/site/info.json")!, timeoutInterval: 10)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        do {
+            let (data, response) = try await session.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let site = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            guard status == 200, site?["title"] != nil else {
+                return EndpointCheck(title: title, outcome: .failed, detail: "HTTP \(status)，返回的不是 V2EX 接口数据")
+            }
+            return EndpointCheck(title: title, outcome: .passed, detail: "公开接口可用")
+        } catch {
+            return EndpointCheck(title: title, outcome: .failed, detail: error.localizedDescription)
+        }
+    }
+
+    private func probeList(_ base: URL) async -> (EndpointCheck, URL?) {
+        let title = "网页列表"
+        var request = URLRequest(url: URL(string: base.absoluteString + "/recent?p=1")!, timeoutInterval: 10)
+        request.setValue(Self.desktopUserAgent, forHTTPHeaderField: "User-Agent")
+        request.httpShouldHandleCookies = false
+        do {
+            let (data, response) = try await webSession.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let topics = String(data: data, encoding: .utf8).map(Self.topicRows) ?? []
+            let avatar = topics.lazy.compactMap { $0.member?.avatarURL }.first
+            guard status == 200 else {
+                return (EndpointCheck(title: title, outcome: .failed, detail: "HTTP \(status)"), avatar)
+            }
+            guard !topics.isEmpty else {
+                return (EndpointCheck(title: title, outcome: .warning,
+                                      detail: "页面能打开，但没有解析到话题，可能是验证页或被反代改写过"), avatar)
+            }
+            return (EndpointCheck(title: title, outcome: .passed, detail: "能读取最新话题"), avatar)
+        } catch {
+            return (EndpointCheck(title: title, outcome: .failed, detail: error.localizedDescription), nil)
+        }
+    }
+
+    /// 未登录访问 `/settings` 会被 302 到 `/signin`：官方给的是相对地址，反代若
+    /// 改写成绝对地址就得指回自己。V2EX 的会话 Cookie 不带 Domain，原样转发
+    /// 即可；被加上别的 Domain 时登录后存不下会话。
+    private func probeLogin(_ base: URL) async -> EndpointCheck {
+        let title = "网页登录"
+        let host = base.host()?.lowercased() ?? ""
+        do {
+            var request = URLRequest(url: URL(string: base.absoluteString + "/settings")!, timeoutInterval: 10)
+            request.setValue(Self.mobileUserAgent, forHTTPHeaderField: "User-Agent")
+            request.httpShouldHandleCookies = false
+            let (_, response) = try await webSession.data(for: request, delegate: RedirectBlocker())
+            let location = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Location") ?? ""
+            let signin = URL(string: location, relativeTo: base)?.absoluteURL
+            if let target = signin?.host()?.lowercased(), target != host {
+                return EndpointCheck(title: title, outcome: .failed,
+                                     detail: "跳转指向了 \(target)，反代需要把 Location 改写成自己的地址")
+            }
+
+            request.url = signin ?? URL(string: base.absoluteString + "/signin")!
+            let (data, signinResponse) = try await webSession.data(for: request)
+            let http = signinResponse as? HTTPURLResponse
+            let html = String(data: data, encoding: .utf8) ?? ""
+            guard http?.statusCode == 200, html.contains(#"type="password""#) else {
+                return EndpointCheck(title: title, outcome: .failed,
+                                     detail: "没有打开登录页（HTTP \(http?.statusCode ?? 0)）")
+            }
+            let cookies = http?.value(forHTTPHeaderField: "Set-Cookie") ?? ""
+            let domains = Self.matches(in: cookies, pattern: #"(?i)domain=\.?([^;,\s]+)"#, groupCount: 1).map { $0[1].lowercased() }
+            if let foreign = domains.first(where: { host != $0 && !host.hasSuffix("." + $0) }) {
+                return EndpointCheck(title: title, outcome: .warning,
+                                     detail: "Cookie 的 Domain 被设成了 \(foreign)，登录后会话存不下来")
+            }
+            return EndpointCheck(title: title, outcome: .passed, detail: "登录页可用")
+        } catch {
+            return EndpointCheck(title: title, outcome: .failed, detail: error.localizedDescription)
+        }
+    }
+
+    private func probeImage(_ sample: URL?, imageBase: URL?) async -> EndpointCheck {
+        let title = "图片"
+        let official = sample
+            ?? URL(string: "https://\(V2EXEndpoint.officialImageHost)/gravatar/\(String(repeating: "0", count: 32))?s=48&d=retro")!
+        let url = V2EXEndpoint.routed(official, base: nil, imageBase: imageBase)
+        do {
+            let (_, response) = try await session.data(for: URLRequest(url: url, timeoutInterval: 10))
+            let http = response as? HTTPURLResponse
+            guard http?.statusCode == 200, http?.mimeType?.hasPrefix("image/") == true else {
+                return EndpointCheck(title: title, outcome: imageBase == nil ? .warning : .failed,
+                                     detail: "HTTP \(http?.statusCode ?? 0)，没有拿到图片")
+            }
+            return EndpointCheck(title: title, outcome: .passed,
+                                 detail: imageBase == nil ? "官方图片域名可以直连" : "头像和图片可以加载")
+        } catch {
+            guard imageBase == nil else {
+                return EndpointCheck(title: title, outcome: .failed, detail: error.localizedDescription)
+            }
+            return EndpointCheck(title: title, outcome: .warning,
+                                 detail: "连不上 \(V2EXEndpoint.officialImageHost)，头像会加载不出来，可以再填一个图片地址")
+        }
     }
 
     // MARK: - Plumbing

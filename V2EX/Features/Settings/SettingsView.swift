@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var aiConfiguration: AIConfigurationStore
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openURL) private var openURL
+    @AppStorage(V2EXEndpoint.customBaseKey) private var customBase = ""
 
     var body: some View {
         ScrollView {
@@ -83,6 +84,22 @@ struct SettingsView: View {
                                 iconColor: Theme.accent,
                                 title: "阅读与离线",
                                 subtitle: "阅读进度、自动离线与缓存"
+                            ) { Chevron() }
+                        }
+                        .buttonStyle(.row)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 0) {
+                    GroupHeader(title: "网络")
+                    CardSection {
+                        NavigationLink(value: Route.customDomain) {
+                            SettingsRow(
+                                icon: "network",
+                                iconColor: Theme.accent,
+                                title: "自定义域名",
+                                subtitle: URL(string: customBase)?.host().map { "通过 \($0) 访问" }
+                                    ?? "访问不了 v2ex.com 时使用自建反代"
                             ) { Chevron() }
                         }
                         .buttonStyle(.row)
@@ -438,7 +455,7 @@ struct AIConfigurationView: View {
     }
 }
 
-private extension View {
+extension View {
     func inputFieldStyle() -> some View {
         self
             .padding(.horizontal, 12)

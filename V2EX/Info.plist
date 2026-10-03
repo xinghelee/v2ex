@@ -37,6 +37,13 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>用于连接你在局域网内自建的 V2EX 反向代理。</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
