@@ -89,7 +89,8 @@ final class HomeViewModel: ObservableObject {
             hasMore = next.hasMore
             paginationID = UUID()
         } catch {
-            guard generation == request, self.feed == feed else { return }
+            // The footer re-runs its task when it scrolls back into view.
+            guard generation == request, self.feed == feed, !error.isCancellation else { return }
             moreError = error.localizedDescription
         }
     }

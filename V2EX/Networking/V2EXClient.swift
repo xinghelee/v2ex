@@ -33,6 +33,14 @@ enum V2EXError: LocalizedError {
     }
 }
 
+extension Error {
+    /// SwiftUI cancels a view's `.task` once it scrolls out of a lazy stack;
+    /// URLSession then throws `URLError.cancelled` (「已取消」), which is not a failure.
+    var isCancellation: Bool {
+        self is CancellationError || (self as? URLError)?.code == .cancelled
+    }
+}
+
 /// API 2.0 wraps every payload in `{success, message, result}`.
 private struct V2Envelope<Value: Decodable>: Decodable {
     let success: Bool?

@@ -90,6 +90,8 @@ final class NodeDetailViewModel: ObservableObject {
             raw.append(contentsOf: more.filter { seen.insert($0.id).inserted })
             topics = raw
         } catch {
+            // The footer re-runs its task when it scrolls back into view.
+            guard !error.isCancellation else { return }
             moreError = error.localizedDescription
         }
     }
