@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct V2EXApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var showLaunchAnimation = true
     @StateObject private var settings = AppSettings()
     @StateObject private var token = TokenStore()
